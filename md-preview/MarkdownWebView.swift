@@ -248,6 +248,16 @@ final class MarkdownWebView: NSView, WKNavigationDelegate {
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
+        case "scroll":
+            guard let value = dict["value"] as? String else { return }
+            switch value {
+            case "pageUp":
+                performScrollAction(.pageUp)
+            case "pageDown":
+                performScrollAction(.pageDown)
+            default:
+                break
+            }
         default:
             break
         }
@@ -777,6 +787,7 @@ private final class NonScrollingWKWebView: WKWebView {
 
     override func keyDown(with event: NSEvent) {
         if forwardHeadingKey(event) { return }
+        if forwardShiftArrowKey(event) { return }
         if isStandardScrollKey(event) {
             interpretKeyEvents([event])
             return
@@ -808,6 +819,8 @@ private final class NonScrollingWKWebView: WKWebView {
     override func scrollLineDown(_ sender: Any?)          { forwardScrollAction(.lineDown) }
     override func scrollPageUp(_ sender: Any?)            { forwardScrollAction(.pageUp) }
     override func scrollPageDown(_ sender: Any?)          { forwardScrollAction(.pageDown) }
+    override func moveUpAndModifySelection(_ sender: Any?) { forwardScrollAction(.pageUp) }
+    override func moveDownAndModifySelection(_ sender: Any?) { forwardScrollAction(.pageDown) }
     override func pageUp(_ sender: Any?)                  { forwardScrollAction(.pageUp) }
     override func pageDown(_ sender: Any?)                { forwardScrollAction(.pageDown) }
     override func scrollToBeginningOfDocument(_ sender: Any?) { forwardScrollAction(.top) }
@@ -830,6 +843,22 @@ private final class NonScrollingWKWebView: WKWebView {
             return forwardScrollAction(.previousHeading)
         case NSDownArrowFunctionKey:
             return forwardScrollAction(.nextHeading)
+        default:
+            return false
+        }
+    }
+
+    private func forwardShiftArrowKey(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers.subtracting([.shift, .capsLock]).isEmpty,
+              modifiers.contains(.shift),
+              let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first else { return false }
+
+        switch Int(scalar.value) {
+        case NSUpArrowFunctionKey:
+            return forwardScrollAction(.pageUp)
+        case NSDownArrowFunctionKey:
+            return forwardScrollAction(.pageDown)
         default:
             return false
         }
@@ -859,6 +888,10 @@ private final class NonScrollingWKWebView: WKWebView {
             return forwardScrollAction(.lineUp)
         case #selector(scrollLineDown(_:)):
             return forwardScrollAction(.lineDown)
+        case #selector(moveUpAndModifySelection(_:)):
+            return forwardScrollAction(.pageUp)
+        case #selector(moveDownAndModifySelection(_:)):
+            return forwardScrollAction(.pageDown)
         case #selector(scrollPageUp(_:)), #selector(pageUp(_:)):
             return forwardScrollAction(.pageUp)
         case #selector(scrollPageDown(_:)), #selector(pageDown(_:)):
