@@ -14,7 +14,36 @@ export interface WebdavBackupFile {
 export function normalizeBaseUrl(raw: string): string {
   let val = raw.trim();
   if (!val) throw new Error("WebDAV 地址不能为空");
-  if (!/^https?:\/\//i.test(val)) throw new Error("WebDAV 地址必须以 http 或 https 开头");
+  
+  if (!/^https?:\/\//i.test(val)) {
+    throw new Error("WebDAV 地址必须以 http 或 https 开头");
+  }
+
+  if (/^http:\/\//i.test(val)) {
+    let host = "";
+    try {
+      const url = new URL(val);
+      host = url.hostname.toLowerCase();
+    } catch (e) {
+      const match = val.match(/^http:\/\/([^:/]+)/i);
+      if (match) {
+        host = match[1].toLowerCase();
+      }
+    }
+    
+    // 局域网私有地址和本地回环地址放行 HTTP，保障 NAS 局域网内同步的可用性
+    const isLocal = 
+      host === "localhost" || 
+      host === "127.0.0.1" || 
+      host.startsWith("192.168.") || 
+      host.startsWith("10.") || 
+      host.endsWith(".local") ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+
+    if (!isLocal) {
+      throw new Error("公网 WebDAV 服务必须使用安全的 https 连接");
+    }
+  }
   
   try {
     const url = new URL(val);
