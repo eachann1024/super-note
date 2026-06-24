@@ -381,11 +381,11 @@ export function SettingsDataPanel({
           <TabsTrigger value="local" className="flex-1 rounded-[10px] py-1.5 text-sm font-medium">本地备份</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="local" className="space-y-0 outline-none">
+        <TabsContent value="local" className="space-y-2 outline-none">
           <SettingsSectionCard
             title={<span className="flex items-center gap-2"><Download className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />导入与导出</span>}
             description="导入选 ZIP 文件；导出时会弹出系统保存对话框让你选路径。"
-            className="pb-0"
+            className="pb-3"
             actions={
               <Button variant="secondary" size="sm" onClick={onImport} disabled={importing}>
                 {importing ? "导入中..." : "导入 ZIP"}
@@ -492,7 +492,7 @@ export function SettingsDataPanel({
 
           <SettingsSectionCard
             tone="danger"
-            className="pt-0"
+            className="pt-3"
             title={<span className="flex items-center gap-2"><RotateCcw className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />重置所有数据</span>}
             description="会清空所有记事本和页面，无法撤销，操作前建议先导出备份。"
             actions={
@@ -503,11 +503,11 @@ export function SettingsDataPanel({
           />
         </TabsContent>
 
-        <TabsContent value="webdav" className="space-y-0 outline-none">
+        <TabsContent value="webdav" className="space-y-2 outline-none">
           <SettingsSectionCard
             title={<span className="flex items-center gap-2"><Cloud className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />WebDAV 配置</span>}
             description="配置 WebDAV 服务以同步并自动管理云端备份。"
-            className="pb-0"
+            className="pb-3"
           >
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -632,7 +632,7 @@ export function SettingsDataPanel({
           </SettingsSectionCard>
 
           <SettingsSectionCard
-            className="pt-0"
+            className="pt-3"
             title={
               <button
                 type="button"
