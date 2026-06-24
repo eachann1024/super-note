@@ -31,14 +31,19 @@ export function normalizeBaseUrl(raw: string): string {
       }
     }
     
-    // 局域网私有地址和本地回环地址放行 HTTP，保障 NAS 局域网内同步的可用性
+    // 局域网私有地址和本地回环地址放行 HTTP，保障 NAS 局域网内同步的可用性（包含常见的 IPv6 本地及回环地址）
     const isLocal = 
       host === "localhost" || 
-      host === "127.0.0.1" || 
+      host.startsWith("127.") || 
+      host === "::1" ||
+      host === "[::1]" ||
       host.startsWith("192.168.") || 
       host.startsWith("10.") || 
       host.endsWith(".local") ||
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
+      host.startsWith("[fe80:") ||
+      host.startsWith("[fd") ||
+      host.startsWith("[fc");
 
     if (!isLocal) {
       throw new Error("公网 WebDAV 服务必须使用安全的 https 连接");
