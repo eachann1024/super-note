@@ -84,7 +84,9 @@ export const useNotebooks = create<NotebooksState>()(
 
       createNotebook: (name = "Note", icon = "BookOpen", overrideIfExists = false, customId?: string) => {
         const dupNotebook = overrideIfExists
-          ? Object.values(get().notebooks).find((n) => n.name === name)
+          ? Object.values(get().notebooks).find(
+              (n) => (customId && n.id === customId) || n.name === name,
+            )
           : null;
 
         const finalId = customId ?? generateId();

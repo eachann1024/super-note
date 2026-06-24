@@ -210,7 +210,8 @@ export const useSettings = create<SettingsState>()(
                     if (typeof state.webdavRemoteDir !== 'string') {
                         useSettings.setState({ webdavRemoteDir: 'goose-notes' })
                     }
-                    if (typeof state.webdavRetentionDays !== 'number') {
+                    const retention = state.webdavRetentionDays;
+                    if (typeof retention !== 'number' || !Number.isFinite(retention) || retention <= 0) {
                         useSettings.setState({ webdavRetentionDays: 365 })
                     }
                     if (typeof state.webdavAutoBackupEnabled !== 'boolean') {
