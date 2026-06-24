@@ -435,7 +435,9 @@ export function markdownToJsonContent(markdown: string): any {
       }
     } else if (
       content.length > 0 &&
-      content[content.length - 1].type !== "paragraph"
+      ["bulletListItem", "numberedListItem", "checkListItem"].includes(
+        content[content.length - 1].type,
+      )
     ) {
       content.push({ type: "paragraph" });
     }

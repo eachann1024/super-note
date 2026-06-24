@@ -177,7 +177,9 @@ declare global {
   const decodeUnsupportedMarkdownForDisk: typeof import('./lib/markdown-raw-guard').decodeUnsupportedMarkdownForDisk
   const deleteLocalMdSnapshot: typeof import('./lib/local-md-snapshot').deleteLocalMdSnapshot
   const deletePageWithUndo: typeof import('./lib/page-delete-actions').deletePageWithUndo
+  const deleteWebdavBackup: typeof import('./lib/webdavSync').deleteWebdavBackup
   const detectBlockScopeHeuristic: typeof import('./lib/ai-block-scope').detectBlockScopeHeuristic
+  const downloadWebdavBackup: typeof import('./lib/webdavSync').downloadWebdavBackup
   const emptyBlock: typeof import('./components/editor/utils/blocknote-content/index').emptyBlock
   const encodeUnsupportedMarkdownForEditor: typeof import('./lib/markdown-raw-guard').encodeUnsupportedMarkdownForEditor
   const ensureFilenameAsTitle: typeof import('./lib/local-title-binding').ensureFilenameAsTitle
@@ -209,6 +211,7 @@ declare global {
   const formatShortcut: typeof import('./lib/utils').formatShortcut
   const forwardRef: typeof import('react').forwardRef
   const generateDocxBuffer: typeof import('./lib/docxExport/index').generateDocxBuffer
+  const generateExportZip: typeof import('./lib/export/index').generateExportZip
   const getAIAvailability: typeof import('./lib/ai-provider/index').getAIAvailability
   const getAIProviderMode: typeof import('./lib/ai-provider/index').getAIProviderMode
   const getAttachmentBadgeLabel: typeof import('./lib/fileStorage').getAttachmentBadgeLabel
@@ -242,6 +245,7 @@ declare global {
   const importMarkdownFragment: typeof import('./lib/export/index').importMarkdownFragment
   const importNotebooksFromZip: typeof import('./lib/export/index').importNotebooksFromZip
   const inlineToTextRuns: typeof import('./lib/docxExport/docxStyles').inlineToTextRuns
+  const isBackupFileName: typeof import('./lib/webdavSync').isBackupFileName
   const isBlockNoteContent: typeof import('./components/editor/utils/blocknote-content/index').isBlockNoteContent
   const isBottomEditorBlankClick: typeof import('./components/editor/utils/selection').isBottomEditorBlankClick
   const isDiskContentMatchingSnapshot: typeof import('./lib/local-md-snapshot').isDiskContentMatchingSnapshot
@@ -257,6 +261,7 @@ declare global {
   const isValidUrl: typeof import('./components/editor/utils/clipboard').isValidUrl
   const jsonContentToMarkdown: typeof import('./lib/export/index').jsonContentToMarkdown
   const lazy: typeof import('react').lazy
+  const listWebdavBackups: typeof import('./lib/webdavSync').listWebdavBackups
   const localFileTitleFromPath: typeof import('./lib/local-folder-scanner').localFileTitleFromPath
   const looksLikeBlockStructure: typeof import('./components/editor/utils/clipboard').looksLikeBlockStructure
   const looksLikeMarkdownFragment: typeof import('./components/editor/utils/clipboard').looksLikeMarkdownFragment
@@ -268,12 +273,14 @@ declare global {
   const migrateCodeStyleTo2026: typeof import('./lib/code-style-migration').migrateCodeStyleTo2026
   const migrateLocalPageIdMapEntry: typeof import('./lib/local-page-idmap').migrateLocalPageIdMapEntry
   const mimeToImageType: typeof import('./lib/docxExport/docxImages').mimeToImageType
+  const normalizeBaseUrl: typeof import('./lib/webdavSync').normalizeBaseUrl
   const normalizeBlockContent: typeof import('./components/editor/utils/blocknote-content/index').normalizeBlockContent
   const normalizeBlocks: typeof import('./components/editor/utils/blocknote-content/index').normalizeBlocks
   const normalizeClipboardLineEndings: typeof import('./components/editor/utils/clipboard').normalizeClipboardLineEndings
   const normalizeExternalUrl: typeof import('./lib/openExternalUrl').normalizeExternalUrl
   const normalizeMarkdownPasteText: typeof import('./components/editor/utils/clipboard').normalizeMarkdownPasteText
   const normalizePageContent: typeof import('./components/editor/utils/blocknote-content/index').normalizePageContent
+  const normalizeRemoteDir: typeof import('./lib/webdavSync').normalizeRemoteDir
   const onboardingChildPageContent: typeof import('./lib/onboardingContent').onboardingChildPageContent
   const onboardingPageContent: typeof import('./lib/onboardingContent').onboardingPageContent
   const onboardingSecondChildContent: typeof import('./lib/onboardingContent').onboardingSecondChildContent
@@ -323,11 +330,14 @@ declare global {
   const stickyTargetToSelection: typeof import('./lib/ai-write/index').stickyTargetToSelection
   const stripMarkdownHardBreaks: typeof import('./components/editor/utils/clipboard').stripMarkdownHardBreaks
   const subscribeGlobalScrollActivity: typeof import('./hooks/useGlobalScrollActivity').subscribeGlobalScrollActivity
+  const testWebdavConnection: typeof import('./lib/webdavSync').testWebdavConnection
   const titleHeadingBlock: typeof import('./components/editor/utils/blocknote-content/index').titleHeadingBlock
   const toRelativePath: typeof import('./lib/local-page-idmap').toRelativePath
   const toggleVariants: typeof import('./components/ui/toggle').toggleVariants
+  const triggerAutoWebdavBackup: typeof import('./lib/webdavSync').triggerAutoWebdavBackup
   const uToolsStorage: typeof import('./lib/storage').uToolsStorage
   const updateSnapshotAfterWrite: typeof import('./lib/local-md-snapshot').updateSnapshotAfterWrite
+  const uploadWebdavBackup: typeof import('./lib/webdavSync').uploadWebdavBackup
   const use: typeof import('react').use
   const useActionState: typeof import('react').useActionState
   const useAiSessions: typeof import('./stores/useAiSessions').useAiSessions
@@ -425,6 +435,9 @@ declare global {
   // @ts-ignore
   export type { UToolsAdapter, SublistItem, UserInfo } from './lib/utools'
   import('./lib/utools')
+  // @ts-ignore
+  export type { WebdavBackupFile } from './lib/webdavSync'
+  import('./lib/webdavSync')
   // @ts-ignore
   export type { BadgeProps } from './components/ui/badge'
   import('./components/ui/badge')
