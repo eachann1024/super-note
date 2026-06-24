@@ -414,6 +414,13 @@ export const bootstrap = async (
   if (rootElement.dataset.entry !== "quicknote") {
     const preloadAll = () => {
       void usePages.getState().loadAllLocalFolderPages();
+      import("@/lib/webdavSync")
+        .then(({ triggerAutoWebdavBackup }) => {
+          void triggerAutoWebdavBackup();
+        })
+        .catch((e) => {
+          console.error("加载 webdavSync 模块失败", e);
+        });
     };
     if (typeof requestIdleCallback === "function") {
       requestIdleCallback(preloadAll, { timeout: 4000 });

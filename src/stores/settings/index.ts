@@ -25,6 +25,7 @@ import { createUToolsSlice, type UToolsSlice } from './slices/utoolsSlice'
 import { createShortcutsSlice, type ShortcutsSlice, DEFAULT_APP_SHORTCUTS } from './slices/shortcutsSlice'
 import { createSearchProvidersSlice, type SearchProvidersSlice } from './slices/searchProvidersSlice'
 import { createLocalFolderSlice, type LocalFolderSlice } from './slices/localFolderSlice'
+import { createWebdavSlice, type WebdavSlice } from './slices/webdavSlice'
 
 export type SettingsState =
     AISlice &
@@ -32,7 +33,8 @@ export type SettingsState =
     UToolsSlice &
     ShortcutsSlice &
     SearchProvidersSlice &
-    LocalFolderSlice & {
+    LocalFolderSlice &
+    WebdavSlice & {
         _hasHydrated: boolean
     }
 
@@ -110,6 +112,7 @@ export const useSettings = create<SettingsState>()(
             ...createShortcutsSlice(set as Parameters<typeof createShortcutsSlice>[0]),
             ...createSearchProvidersSlice(set as Parameters<typeof createSearchProvidersSlice>[0]),
             ...createLocalFolderSlice(set as Parameters<typeof createLocalFolderSlice>[0]),
+            ...createWebdavSlice(set as Parameters<typeof createWebdavSlice>[0]),
             _hasHydrated: false,
         }),
         {
@@ -195,6 +198,24 @@ export const useSettings = create<SettingsState>()(
                 }
 
                 if (state) {
+                    if (typeof state.webdavUrl !== 'string') {
+                        useSettings.setState({ webdavUrl: 'https://dav.jianguoyun.com/dav/' })
+                    }
+                    if (typeof state.webdavUsername !== 'string') {
+                        useSettings.setState({ webdavUsername: '' })
+                    }
+                    if (typeof state.webdavPassword !== 'string') {
+                        useSettings.setState({ webdavPassword: '' })
+                    }
+                    if (typeof state.webdavRemoteDir !== 'string') {
+                        useSettings.setState({ webdavRemoteDir: 'goose-notes' })
+                    }
+                    if (typeof state.webdavRetentionDays !== 'number') {
+                        useSettings.setState({ webdavRetentionDays: 365 })
+                    }
+                    if (typeof state.webdavAutoBackupEnabled !== 'boolean') {
+                        useSettings.setState({ webdavAutoBackupEnabled: true })
+                    }
                     if (typeof state.showRecentInSearch !== 'boolean') {
                         useSettings.setState({ showRecentInSearch: true })
                     }

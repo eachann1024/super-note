@@ -164,15 +164,17 @@ export const createPageAction = (
   get: StoreGet,
   parentId?: string,
   workspaceId = DEFAULT_NOTEBOOK,
+  id?: string,
 ): string => {
   flushEditorContent();
 
-  const id = get().createPageRecord({
+  const finalId = get().createPageRecord({
     workspaceId,
     parentId,
+    id,
   });
-  set({ activePageId: id });
-  useNotebooks.getState().setLastActivePage(workspaceId, id);
+  set({ activePageId: finalId });
+  useNotebooks.getState().setLastActivePage(workspaceId, finalId);
 
   if (typeof window !== "undefined") {
     setTimeout(() => {
@@ -182,22 +184,23 @@ export const createPageAction = (
     }, 100);
   }
 
-  return id;
+  return finalId;
 };
 
 export const createPageRecordAction = (
   set: StoreSet,
   get: StoreGet,
-  { workspaceId, parentId, content }: {
+  options: {
     workspaceId: string;
     parentId?: string;
-    content?: JSONContent;
-  },
+    id?: string;
+  } & Partial<Page>,
 ): string => {
-  const id = uuidv4();
+  const { workspaceId, parentId, id, content, ...extra } = options;
+  const finalId = id || uuidv4();
   const now = Date.now();
   const newPage: Page = {
-    id,
+    id: finalId,
     workspaceId,
     parentId,
     content: clonePageContent(content),
@@ -209,14 +212,15 @@ export const createPageRecordAction = (
     createdAt: now,
     updatedAt: now,
     order: now,
+    ...extra,
   };
 
   set((state) => ({
-    pages: { ...state.pages, [id]: newPage },
+    pages: { ...state.pages, [finalId]: newPage },
   }));
 
-  persistPageSnapshot(get().pages[id]);
-  return id;
+  persistPageSnapshot(get().pages[finalId]);
+  return finalId;
 };
 
 export const createLocalPageAction = async (

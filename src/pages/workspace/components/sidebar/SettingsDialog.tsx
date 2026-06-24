@@ -50,6 +50,29 @@ const RECOMMENDED_APPS = [
 const FEEDBACK_URL = "https://wj.qq.com/s2/25958121/2d2e/";
 const SETTINGS_APPS_BANNER_ID = "settings:recommended-apps-banner";
 
+const recordPreOverwriteHistory = (id: string | undefined) => {
+  if (!id) return;
+  const existingPage = usePages.getState().pages[id];
+  if (existingPage && existingPage.content) {
+    const oldContent = existingPage.content;
+    const oldWorkspaceId = existingPage.workspaceId;
+    import("@/lib/history/snapshot")
+      .then(({ recordHistorySnapshot }) => {
+        return recordHistorySnapshot({
+          pageId: id,
+          workspaceId: oldWorkspaceId,
+          content: oldContent,
+          trigger: "manual",
+          isMilestone: true,
+          label: "备份覆盖前本地版本",
+        });
+      })
+      .catch((err) => {
+        console.error("[history] Failed to save pre-overwrite history", err);
+      });
+  }
+};
+
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const {
     theme,
@@ -240,18 +263,23 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         const { importNotebooksFromZip } = await import("@/lib/export");
         await importNotebooksFromZip(
           file,
-          (name) => {
+          (name, icon, id) => {
             notebookCount++;
-            const id = createNotebook(name);
-            if (!firstWorkspaceId) firstWorkspaceId = id;
-            return id;
+            const newId = createNotebook(name, icon || "BookOpen", true, id);
+            if (!firstWorkspaceId) firstWorkspaceId = newId;
+            return newId;
           },
-          (data, workspaceId, parentId) => {
+          (data, workspaceId, parentId, id) => {
             pageCount++;
-            const id = createPage(parentId, workspaceId);
-            updatePage(id, data);
-            if (!firstPageId) firstPageId = id;
-            return id;
+            recordPreOverwriteHistory(id);
+            const pageId = usePages.getState().createPageRecord({
+              ...data,
+              id,
+              workspaceId,
+              parentId,
+            });
+            if (!firstPageId) firstPageId = pageId;
+            return pageId;
           },
         );
 
@@ -282,39 +310,117 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     }
   }, [resetDialogOpen]);
 
-  const handleReset = () => {
-    if (!canReset) return;
+  const handleImportBlob = async (blob: Blob) => {
+    setImporting(true);
+    try {
+      let firstWorkspaceId: string | null = null;
+      let firstPageId: string | null = null;
+      const { importNotebooksFromZip } = await import("@/lib/export");
+      await importNotebooksFromZip(
+        blob,
+        (name, icon, id) => {
+          const newId = createNotebook(name, icon || "BookOpen", true, id);
+          if (!firstWorkspaceId) firstWorkspaceId = newId;
+          return newId;
+        },
+        (data, workspaceId, parentId, id) => {
+          recordPreOverwriteHistory(id);
+          const pageId = usePages.getState().createPageRecord({
+            ...data,
+            id,
+            workspaceId,
+            parentId,
+          });
+          if (!firstPageId && workspaceId === firstWorkspaceId) firstPageId = pageId;
+          return pageId;
+        },
+      );
+      if (firstWorkspaceId) {
+        useNotebooks.setState({ activeNotebookId: firstWorkspaceId });
+        if (firstPageId) {
+          usePages.setState({ activePageId: firstPageId });
+        }
+      }
+      toast.success("导入成功");
+    } catch (err) {
+      console.error("Import blob failed", err);
+      toast.error("导入失败");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleReset = async (zipBlob?: Blob) => {
+    if (!zipBlob && !canReset) return;
     dataStorage.removeItem("goose-note-notebooks");
     clearPersistedPages();
     clearLegacyStorage();
     clearLocalPageMetadataCache();
-    const defaultNotebook = {
-      id: DEFAULT_NOTEBOOK,
-      name: "Note",
-      icon: "BookOpen",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    useNotebooks.setState({
-      notebooks: { [DEFAULT_NOTEBOOK]: defaultNotebook },
-      activeNotebookId: DEFAULT_NOTEBOOK,
-      lastActivePageByNotebook: {},
-    });
-    usePages.setState({
-      pages: {},
-      activePageId: null,
-      pendingNavigatePageId: null,
-      expandPageId: null,
-      searchHighlightQuery: null,
-      searchHighlightPageId: null,
-      searchHighlightNonce: 0,
-      handledSearchHighlightNonce: 0,
-      hydrated: true,
-      lastSavedAt: null,
-      onboardingCompleted: false,
-    });
-    setResetDialogOpen(false);
-    onOpenChange(false);
+    if (zipBlob) {
+      try {
+        let firstWorkspaceId: string | null = null;
+        let firstPageId: string | null = null;
+        const { importNotebooksFromZip } = await import("@/lib/export");
+        await importNotebooksFromZip(
+          zipBlob,
+          (name, icon, id) => {
+            const newId = createNotebook(name, icon || "BookOpen", true, id);
+            if (!firstWorkspaceId) firstWorkspaceId = newId;
+            return newId;
+          },
+          (data, workspaceId, parentId, id) => {
+            recordPreOverwriteHistory(id);
+            const pageId = usePages.getState().createPageRecord({
+              ...data,
+              id,
+              workspaceId,
+              parentId,
+            });
+            if (!firstPageId && workspaceId === firstWorkspaceId) firstPageId = pageId;
+            return pageId;
+          },
+        );
+        if (firstWorkspaceId) {
+          useNotebooks.setState({ activeNotebookId: firstWorkspaceId });
+          if (firstPageId) {
+            usePages.setState({ activePageId: firstPageId });
+          }
+        }
+        toast.success("恢复并同步成功");
+      } catch (err) {
+        console.error("Sync import failed", err);
+        toast.error("恢复失败");
+      }
+    } else {
+      const defaultNotebook = {
+        id: DEFAULT_NOTEBOOK,
+        name: "Note",
+        icon: "BookOpen",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      useNotebooks.setState({
+        notebooks: { [DEFAULT_NOTEBOOK]: defaultNotebook },
+        activeNotebookId: DEFAULT_NOTEBOOK,
+        lastActivePageByNotebook: {},
+      });
+      usePages.setState({
+        pages: {},
+        activePageId: null,
+        pendingNavigatePageId: null,
+        expandPageId: null,
+        searchHighlightQuery: null,
+        searchHighlightPageId: null,
+        searchHighlightNonce: 0,
+        handledSearchHighlightNonce: 0,
+        hydrated: true,
+        lastSavedAt: null,
+        onboardingCompleted: false,
+      });
+      setResetDialogOpen(false);
+      onOpenChange(false);
+      toast.success("重置成功");
+    }
   };
 
   const handleCloseAppsBanner = () => {
@@ -471,6 +577,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               exporting={exporting}
               onExport={handleExport}
               onOpenResetDialog={() => setResetDialogOpen(true)}
+              onImportBlob={handleImportBlob}
+              onResetAndImport={handleReset}
             />
           )}
         </SettingsScaffold>
@@ -513,7 +621,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           <Button
             variant="destructive"
             size="sm"
-            onClick={handleReset}
+            onClick={() => handleReset()}
             disabled={!canReset}
             className="flex-1"
           >

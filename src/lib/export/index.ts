@@ -24,6 +24,7 @@ export {
 } from "./markdown/parse";
 export {
   exportNotebooks,
+  generateExportZip,
   importNotebooksFromZip,
   type ExportOptions,
 } from "./zipBundle";

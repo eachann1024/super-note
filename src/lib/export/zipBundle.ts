@@ -1,6 +1,7 @@
 import type { Page } from "@/types";
 import type { BlockNoteContent } from "@/components/editor/utils/blocknote-content";
 import type JSZipNs from "jszip";
+import { useNotebooks } from "@/stores/useNotebooks";
 import { extractTitleFromContent } from "@/components/editor/utils/content-text-extractor";
 import { blobToBase64 } from "@/lib/imageStorage/utils";
 import {
@@ -186,11 +187,11 @@ export interface ExportOptions {
   notebookIds: string[];
 }
 
-export async function exportNotebooks(
+export async function generateExportZip(
   options: ExportOptions,
   notebooksMap: Record<string, { name: string; localPath?: string }>,
   allPages: Page[],
-) {
+): Promise<Blob> {
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   const { format, notebookIds } = options;
@@ -287,7 +288,62 @@ export async function exportNotebooks(
     }
   }
 
-  const content = await zip.generateAsync({ type: "blob" });
+  const exportNotebooksList = Object.keys(notebooksMap)
+    .filter((id) => notebookIds.includes(id))
+    .map((id) => (useNotebooks.getState().notebooks as any)[id])
+    .filter(Boolean);
+
+  const exportPagesList = allPages.filter((p) => notebookIds.includes(p.workspaceId));
+
+  // 读取并打包历史记录数据
+  const { resolveHistoryBackend } = await import("@/lib/history/backend");
+  const exportHistory: Record<string, { index: any; versions: any[] }> = {};
+
+  for (const page of exportPagesList) {
+    try {
+      const backend = resolveHistoryBackend(page.id);
+      const index = await backend.loadIndex(page.id);
+      if (index && index.versions && index.versions.length > 0) {
+        const versions: any[] = [];
+        for (const v of index.versions) {
+          const version = await backend.loadVersion(page.id, v.versionId);
+          if (version) {
+            versions.push(version);
+          }
+        }
+        exportHistory[page.id] = {
+          index,
+          versions,
+        };
+      }
+    } catch (err) {
+      console.error(`Failed to export history for page ${page.id}:`, err);
+    }
+  }
+
+  zip.file(
+    "backup-metadata.json",
+    JSON.stringify(
+      {
+        version: 1,
+        notebooks: exportNotebooksList,
+        pages: exportPagesList,
+        history: exportHistory,
+      },
+      null,
+      2,
+    ),
+  );
+
+  return await zip.generateAsync({ type: "blob" });
+}
+
+export async function exportNotebooks(
+  options: ExportOptions,
+  notebooksMap: Record<string, { name: string; localPath?: string }>,
+  allPages: Page[],
+) {
+  const content = await generateExportZip(options, notebooksMap, allPages);
   const now = new Date();
   const pad = (n: number) => n.toString().padStart(2, "0");
   const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
@@ -328,11 +384,12 @@ function triggerBrowserDownload(blob: Blob, filename: string): boolean {
 
 export async function importNotebooksFromZip(
   zipBlob: Blob,
-  onCreateNotebook: (name: string) => string,
+  onCreateNotebook: (name: string, icon?: string, id?: string) => string,
   onCreatePage: (
     data: Partial<Page>,
     workspaceId: string,
     parentId?: string,
+    id?: string,
   ) => string,
 ) {
   const { default: JSZip } = await import("jszip");
@@ -381,6 +438,115 @@ export async function importNotebooksFromZip(
       if (block.children?.length) restoreImages(block.children, notebookAssetMap);
     }
   };
+
+  const metaFile = zip.file("backup-metadata.json");
+  if (metaFile) {
+    try {
+      const metaText = await metaFile.async("text");
+      const meta = JSON.parse(metaText);
+      if (meta && Array.isArray(meta.notebooks) && Array.isArray(meta.pages)) {
+        for (const nb of meta.notebooks) {
+          onCreateNotebook(nb.name, nb.icon || "BookOpen", nb.id);
+        }
+
+        const notebookAssetMaps = new Map<string, Map<string, string>>();
+        for (const nb of meta.notebooks) {
+          const assetMap = await loadAssetsFromFolder(zip.folder(`${nb.name}/assets`));
+          notebookAssetMaps.set(nb.id, assetMap);
+        }
+
+        for (const page of meta.pages) {
+          const pageData = { ...page };
+          const assetMap = notebookAssetMaps.get(page.workspaceId);
+          if (pageData.content && assetMap) {
+            restoreImages(pageData.content, assetMap);
+          }
+          onCreatePage(pageData, page.workspaceId, page.parentId, page.id);
+        }
+
+        // 还原并合并历史记录数据到本地数据库
+        if (meta.history) {
+          const { resolveHistoryBackend } = await import("@/lib/history/backend");
+          const MAX_VERSIONS_PER_PAGE = 50;
+
+          for (const [pageId, historyItem] of Object.entries(meta.history) as [string, any][]) {
+            try {
+              const backend = resolveHistoryBackend(pageId);
+              const localIndex = await backend.loadIndex(pageId);
+              const importedIndex = historyItem.index;
+              const importedVersions = historyItem.versions || [];
+
+              if (!importedIndex) continue;
+
+              // 1. 合并 versions 列表并去重
+              const versionMap = new Map<string, any>();
+              
+              if (localIndex && Array.isArray(localIndex.versions)) {
+                for (const v of localIndex.versions) {
+                  versionMap.set(v.versionId, v);
+                }
+              }
+              if (Array.isArray(importedIndex.versions)) {
+                for (const v of importedIndex.versions) {
+                  versionMap.set(v.versionId, v);
+                }
+              }
+
+              // 按时间戳从小到大排序
+              let mergedVersions = Array.from(versionMap.values()).sort(
+                (a, b) => a.createdAt - b.createdAt
+              );
+
+              // 2. 超出数量限制裁剪（淘汰最旧的非 Milestone）
+              const evictedVersionIds: string[] = [];
+              if (mergedVersions.length > MAX_VERSIONS_PER_PAGE) {
+                while (mergedVersions.length > MAX_VERSIONS_PER_PAGE) {
+                  const evictIdx = mergedVersions.findIndex((v) => !v.isMilestone);
+                  if (evictIdx === -1) break;
+                  const evicted = mergedVersions[evictIdx];
+                  evictedVersionIds.push(evicted.versionId);
+                  mergedVersions = mergedVersions.filter((_, i) => i !== evictIdx);
+                }
+              }
+
+              // 3. 计算最新的字符数
+              const lastVersionCharCount = mergedVersions.length > 0 
+                ? mergedVersions[mergedVersions.length - 1].charCount
+                : 0;
+
+              // 4. 保存合并后的索引
+              await backend.saveIndex({
+                pageId,
+                versions: mergedVersions,
+                lastVersionCharCount,
+              });
+
+              // 5. 写入导入的历史版本
+              if (Array.isArray(importedVersions)) {
+                const activeVersionIds = new Set(mergedVersions.map((v) => v.versionId));
+                for (const version of importedVersions) {
+                  if (activeVersionIds.has(version.versionId)) {
+                    await backend.saveVersion(version);
+                  }
+                }
+              }
+
+              // 6. 清理淘汰裁剪掉的本地历史版本
+              for (const evictedId of evictedVersionIds) {
+                await backend.removeVersion(pageId, evictedId);
+              }
+            } catch (err) {
+              console.error(`Failed to restore and merge history for page ${pageId}:`, err);
+            }
+          }
+        }
+
+        return;
+      }
+    } catch (e) {
+      console.error("Failed to restore from backup-metadata.json, fallback to folder parsing:", e);
+    }
+  }
 
   const topLevelEntries = new Set<string>();
   zip.forEach((path) => {
@@ -450,8 +616,7 @@ export async function importNotebooksFromZip(
         const firstBlock = Array.isArray(content) ? content[0] : undefined;
         const hasH1Title =
           firstBlock?.type === "heading" &&
-          firstBlock.props?.level === 1 &&
-          firstBlock.content === imported.title;
+          firstBlock.props?.level === 1;
         if (!hasH1Title) {
           const blocks = Array.isArray(content) ? content : [];
           pageData = {

@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { uToolsStorage } from "@/lib/storage";
 import { removeLocalPageMetaByWorkspaceId } from "@/lib/storage/pageRepository";
 import { fs } from "@/lib/utools/fs";
+import { persistPageSnapshots } from "./pages/persistence";
 
 export interface Notebook {
   id: string;
@@ -34,7 +35,12 @@ interface NotebooksState {
   lastActivePageByNotebook: Record<string, string | null>;
   localFolderLoadStates: Record<string, LocalFolderLoadState>;
 
-  createNotebook: (name?: string, icon?: string) => string;
+  createNotebook: (
+    name?: string,
+    icon?: string,
+    overrideIfExists?: boolean,
+    customId?: string,
+  ) => string;
   createLocalFolderNotebook: (name: string, localPath: string) => string;
   updateNotebook: (
     id: string,
@@ -76,7 +82,71 @@ export const useNotebooks = create<NotebooksState>()(
       lastActivePageByNotebook: {},
       localFolderLoadStates: {},
 
-      createNotebook: (name = "Note", icon = "BookOpen") => {
+      createNotebook: (name = "Note", icon = "BookOpen", overrideIfExists = false, customId?: string) => {
+        const dupNotebook = overrideIfExists
+          ? Object.values(get().notebooks).find((n) => n.name === name)
+          : null;
+
+        const finalId = customId ?? generateId();
+
+        if (dupNotebook) {
+          const now = Date.now();
+          const batchId = `b-${now}-${dupNotebook.id}`;
+          const pagesStore = usePages.getState();
+          const notebookPages = Object.values(pagesStore.pages).filter(
+            (p) => p.workspaceId === dupNotebook.id,
+          );
+
+          if (notebookPages.length > 0) {
+            const nextPages = { ...pagesStore.pages };
+            const changedIds: string[] = [];
+
+            notebookPages.forEach((page) => {
+              if (page.trashedAt) {
+                nextPages[page.id] = {
+                  ...page,
+                  workspaceId: finalId,
+                };
+              } else {
+                nextPages[page.id] = {
+                  ...page,
+                  workspaceId: finalId,
+                  trashedAt: now,
+                  trashBatchId: batchId,
+                  isFavorite: false,
+                  isPinned: false,
+                  pinnedAt: undefined,
+                };
+              }
+              changedIds.push(page.id);
+            });
+
+            usePages.setState({ pages: nextPages });
+            persistPageSnapshots(nextPages, changedIds);
+          }
+
+          const { [dupNotebook.id]: _, ...remainingNotebooks } = get().notebooks;
+          const { [dupNotebook.id]: __, ...remainingLastActive } = get().lastActivePageByNotebook;
+          const { [dupNotebook.id]: ___, ...remainingLoadStates } = get().localFolderLoadStates;
+
+          const notebook: Notebook = {
+            id: finalId,
+            name,
+            icon,
+            createdAt: dupNotebook.createdAt,
+            updatedAt: now,
+          };
+
+          set({
+            notebooks: { ...remainingNotebooks, [finalId]: notebook },
+            lastActivePageByNotebook: remainingLastActive,
+            localFolderLoadStates: remainingLoadStates,
+            activeNotebookId: finalId,
+          });
+
+          return finalId;
+        }
+
         // 检查是否存在同名笔记本，生成唯一名称
         const existingNames = new Set(
           Object.values(get().notebooks).map((n) => n.name),
@@ -90,20 +160,19 @@ export const useNotebooks = create<NotebooksState>()(
           suffix++;
         }
 
-        const id = generateId();
         const notebook: Notebook = {
-          id,
+          id: finalId,
           name: finalName,
           icon,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
-        const nextNotebooks = { ...get().notebooks, [id]: notebook };
+        const nextNotebooks = { ...get().notebooks, [finalId]: notebook };
         set({
           notebooks: nextNotebooks,
-          activeNotebookId: id,
+          activeNotebookId: finalId,
         });
-        return id;
+        return finalId;
       },
 
       createLocalFolderNotebook: (name, localPath) => {
