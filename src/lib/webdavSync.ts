@@ -51,7 +51,7 @@ export function normalizeBaseUrl(raw: string): string {
     url.hash = "";
     val = url.toString();
   } catch (e) {
-    throw new Error("WebDAV 地址格式无效");
+    throw new Error("WebDAV 地址格式无效", { cause: e });
   }
   
   if (!val.endsWith("/")) {
@@ -71,11 +71,11 @@ export function normalizeRemoteDir(raw: string): string {
     const clean = part.trim();
     if (!clean) throw new Error("WebDAV 远端目录不能包含空路径段");
     
-    let decoded = "";
+    let decoded: string;
     try {
       decoded = decodeURIComponent(clean);
     } catch (e) {
-      throw new Error("WebDAV 远端目录编码无效");
+      throw new Error("WebDAV 远端目录编码无效", { cause: e });
     }
     
     if (decoded === "." || decoded === ".." || decoded.includes("\\")) {
