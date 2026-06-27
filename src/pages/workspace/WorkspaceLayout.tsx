@@ -217,7 +217,7 @@ export function WorkspaceLayout({
                     <div
                       className={cn(
                         "flex min-h-full flex-col pt-0",
-                        isEditorFullWidth ? "px-6 md:px-8 lg:px-10" : "px-8",
+                        isEditorFullWidth ? "px-14" : "px-8",
                       )}
                     >
                       <HistoryReader />
@@ -265,9 +265,7 @@ export function WorkspaceLayout({
                         <div
                           className={cn(
                             "flex min-h-full flex-col",
-                            isEditorFullWidth
-                              ? "px-6 md:px-8 lg:px-10"
-                              : "px-8",
+                            isEditorFullWidth ? "px-14" : "px-8",
                             page.icon ? "pt-4" : "pt-0",
                           )}
                         >

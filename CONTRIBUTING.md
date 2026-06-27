@@ -53,6 +53,22 @@ Use the issue templates under **Issues → New issue**. Please include reproduct
 steps, your environment (OS, uTools version or browser), and expected vs. actual
 behavior.
 
+## Maintainer review checklist
+
+Use this when reviewing contributor PRs (AI assistants: skill `oss-pr-reviewer` + `references/goose-note.md`).
+
+1. **Correct diff** — Review the PR’s real remote head (not a stale local branch with the same name).
+2. **Merge gate** — `typecheck`, `lint`, and full `build` (includes the quick-note plugin build).
+3. **Scope** — One logical change; English Conventional Commits; no `tasks/`, `.env*`, or AI-only tooling artifacts.
+4. **Editor** — Changes under `src/components/editor/` must not break **title block one** (first block is always H1; see `AGENTS.md` / `firstTitleGuard.ts`).
+5. **uTools UI** — Style changes must avoid Tailwind alpha/palette traps that fail in the uTools WebView; prefer CSS variables in `src/index.css`. Browser dev alone is not enough for hover/selected states.
+6. **Dual plugin** — Shared code must still build for both the main app and `GOOSE_BUILD_TARGET=quicknote` / `__GOOSE_LITE__`.
+7. **Data** — Persistence and local-folder sync changes must not lose or silently overwrite notes.
+8. **Security** — No hardcoded secrets or personal paths in defaults; see [SECURITY.md](./SECURITY.md).
+9. **Verification** — Ask for a short **Testing** note in the PR when behavior changes (we do not run e2e in CI).
+
+Local uTools smoke test after `bun run build`: load `dist/plugin.json` in the uTools developer tools (see README).
+
 ## Security
 
 Do not open public issues for security vulnerabilities. See [SECURITY.md](./SECURITY.md).

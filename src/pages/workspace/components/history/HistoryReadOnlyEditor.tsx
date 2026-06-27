@@ -99,8 +99,7 @@ export function HistoryReadOnlyEditor({
     editor.replaceBlocks(editor.document, normalized as any);
   }, [editor, normalized]);
 
-  // 与主 Editor 在 WorkspaceLayout 内的包裹完全一致：max-w-4xl mx-auto / max-w-full
-  // 父级（HistoryView 的 page-scroll-container 内）已经提供 px-8 / px-6 md:px-8 lg:px-10
+  // 与主 Editor 在 WorkspaceLayout 内的包裹一致；父级 page-scroll-container 全宽为 px-14、窄栏为 px-8
   return (
     <div
       className={cn(

@@ -38,6 +38,20 @@ bun run dev
 bun run build
 ```
 
+### uTools 插件调试
+
+浏览器 `bun run dev` 适合改 UI，但 uTools 真机行为（preload、主题、窗口等）需在插件环境里验证：
+
+1. 执行 `bun run build`（会生成 `dist/` 下的完整插件包，含 `dist/plugin.json`）
+2. 打开 **uTools 开发者工具**
+3. **加载插件**，选择本仓库的 `dist/plugin.json`
+4. 在开发者工具中 **打开** 该插件，即可看到最新构建效果
+
+改代码后重复步骤 1，再在开发者工具里重新打开插件（或按工具提示刷新）即可。
+
+速记小窗（B 插件）产物在 `dist-quicknote/plugin.json`，加载方式相同。
+
+
 ## 📦 构建产物
 
 `bun run build` 会执行 `tsc` 类型检查 + `vite build` + uTools 打包脚本，产出可加载到 uTools 的插件包。

@@ -206,8 +206,9 @@
    窗口左边甚至溢出。补 ~56px gutter 让 side menu 落进留白区不溢出窗口；右侧对称留白。
    注：折叠标题箭头与 side menu 同锚内容左缘、向同侧展开，留白只整体右移、消不掉两者
    重叠——那由折叠标题专门处理（见下方 toggle 列覆盖规则）。 */
+/* 全宽 gutter 由 page-scroll-container 的 px-14 统一承担，避免与页面图标列双重缩进 */
 .workspace-editor-surface.max-w-none .bn-editor {
-  padding-inline: 56px;
+  padding-inline: 0;
 }
 
 .workspace-editor-surface .bn-block-content[data-content-type="heading"] h1:first-child {
