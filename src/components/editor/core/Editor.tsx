@@ -15,6 +15,7 @@ import {
 import { useEditorPlatform } from "@/components/editor/platform/context";
 import { clonePageContent, getContentSignature, normalizePageContent, type BlockNoteContent } from "@/components/editor/utils/blocknote-content";
 import { markUserInteraction } from "@/lib/editor-interaction-signal";
+import { normalizeExternalUrl } from "@/lib/openExternalUrl";
 import { usePages as usePagesStore } from "@/stores/usePages";
 
 /**
@@ -42,7 +43,7 @@ function getCachedContentSignature(content: unknown): string {
 }
 import { getBlockNoteSlashMenuItems, filterSlashMenuItems } from "./blocknoteSlashItems";
 import { gooseSelectAllExtension } from "@/components/editor/extensions/selectAllExtension";
-import { gooseLinkKeyboardExtension } from "@/components/editor/extensions/linkKeyboardExtension";
+import { createGooseLinkKeyboardExtension } from "@/components/editor/extensions/linkKeyboardExtension";
 import { gooseTabBehaviorExtension } from "@/components/editor/extensions/tabBehaviorExtension";
 import { gooseCodeBlockKeyboardExtension } from "@/components/editor/extensions/codeBlockKeyboardExtension";
 import { gooseCodeBlockLinkStripExtension } from "@/components/editor/extensions/codeBlockLinkStripExtension";
@@ -94,6 +95,7 @@ interface EditorProps {
 }
 
 export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ editable = true, hiddenSlashItemTitles, showSideMenu = true }, ref) {
+  const settings = useEditorSettings();
   const {
     theme,
     searchProviders,
@@ -101,7 +103,8 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
     tableEvenColumnWidth,
     ai: aiSettings,
     enterKeyBehavior,
-  } = useEditorSettings();
+    utools,
+  } = settings;
   const {
     page,
     isEditorFullWidth,
@@ -136,6 +139,12 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
   // 同 aiSettingsRef 模式，避免闭包捕获旧 platform 引用。
   const platformRef = useRef(platform);
   platformRef.current = platform;
+  // utoolsRef 供 useCreateBlockNote 闭包（deps=[]）调用平台设置，避免闭包捕获旧配置
+  const utoolsRef = useRef(utools);
+  utoolsRef.current = utools;
+  // settingsRef 供 useCreateBlockNote 闭包（deps=[]）调用平台设置，避免闭包捕获旧配置
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   /** uploadFile 与同 tick 粘贴需 getBlock；每 render 同步 */
   const editorInstanceRef = useRef<ReturnType<typeof useCreateBlockNote> | null>(null);
 
@@ -212,7 +221,7 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
         gooseHeadingMarkSuppressExtension,
         gooseTabBehaviorExtension,
         gooseSelectAllExtension,
-        gooseLinkKeyboardExtension,
+        createGooseLinkKeyboardExtension(settingsRef),
         gooseCodeBlockKeyboardExtension,
         gooseCodeBlockLinkStripExtension,
         gooseCalloutKeyboardExtension,
@@ -296,7 +305,11 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
           if (link) {
             const href = link.getAttribute("href");
             if (href) {
-              platformRef.current.shell.openUrl(href);
+              const normalizedHref = normalizeExternalUrl(href);
+              if (normalizedHref) {
+                const useInternalBrowser = utoolsRef.current?.openSearchInUtools ?? false;
+                platformRef.current.shell.openUrl(normalizedHref, useInternalBrowser);
+              }
             }
           }
           return true;

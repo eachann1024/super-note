@@ -5,6 +5,7 @@ import * as LucideIcons from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useEditorPlatform } from "@/components/editor/platform/context";
+import { useEditorSettings } from "@/components/editor/platform/hostContext";
 
 function normalizeExternalUrl(url: string): string {
   const trimmed = url.trim();
@@ -22,6 +23,7 @@ export function EditorLinkToolbar({
 }: LinkToolbarProps) {
   const editor = useBlockNoteEditor();
   const platform = useEditorPlatform();
+  const { utools } = useEditorSettings();
   const [editing, setEditing] = useState(false);
   const [editUrl, setEditUrl] = useState(url);
   const [editText, setEditText] = useState(text);
@@ -66,8 +68,11 @@ export function EditorLinkToolbar({
 
   const handleOpen = useCallback(() => {
     const target = normalizeExternalUrl(url);
-    if (target) void platform.shell.openUrl(target, false);
-  }, [url, platform]);
+    if (target) {
+      const useInternalBrowser = utools?.openSearchInUtools ?? false;
+      void platform.shell.openUrl(target, useInternalBrowser);
+    }
+  }, [url, platform, utools]);
 
   const startEditing = useCallback(() => {
     setEditing(true);
