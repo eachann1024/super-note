@@ -14,6 +14,7 @@ import {
   type CardThemeId,
   type CardTheme,
   type WatermarkConfig,
+  normalizeWatermarkConfig,
 } from "@/lib/imageExport";
 import { useSettings } from "@/stores/settings";
 
@@ -45,19 +46,20 @@ export function ImageExportThemeSelector({
 }: ImageExportThemeSelectorProps) {
   const selectedId = useSettings((s) => s.imageExportThemeId);
   const setSelectedId = useSettings((s) => s.setImageExportThemeId);
-  const watermarkConfig = useSettings((s) => s.imageExportWatermark);
+  const storedWatermark = useSettings((s) => s.imageExportWatermark);
   const setWatermarkConfig = useSettings((s) => s.setImageExportWatermark);
+  const wm = normalizeWatermarkConfig(storedWatermark);
   const [configOpen, setConfigOpen] = useState(false);
 
   const handleConfirm = () => {
-    onConfirm(selectedId, watermarkConfig);
+    onConfirm(selectedId, wm);
     onOpenChange(false);
   };
 
   const modeText = mode === "page" ? "整页" : "选中内容";
 
   const toggleConfig = (key: keyof WatermarkConfig) => {
-    setWatermarkConfig({ ...watermarkConfig, [key]: !watermarkConfig[key] });
+    setWatermarkConfig({ ...wm, [key]: !wm[key] });
   };
 
   return (
@@ -121,7 +123,7 @@ export function ImageExportThemeSelector({
               <div className="flex items-center justify-between">
                 <span className="text-xs text-foreground/80">显示标题</span>
                 <Switch
-                  checked={watermarkConfig.showTitle}
+                  checked={wm.showTitle}
                   onCheckedChange={() => toggleConfig("showTitle")}
                   className="scale-75 origin-right"
                 />
@@ -129,7 +131,7 @@ export function ImageExportThemeSelector({
               <div className="flex items-center justify-between">
                 <span className="text-xs text-foreground/80">显示底部信息栏</span>
                 <Switch
-                  checked={watermarkConfig.showWatermark}
+                  checked={wm.showWatermark}
                   onCheckedChange={() => toggleConfig("showWatermark")}
                   className="scale-75 origin-right"
                 />
@@ -137,27 +139,27 @@ export function ImageExportThemeSelector({
               <div className="flex items-center justify-between pl-3">
                 <span className="text-xs text-muted-foreground">显示品牌名</span>
                 <Switch
-                  checked={watermarkConfig.showBrand}
+                  checked={wm.showBrand}
                   onCheckedChange={() => toggleConfig("showBrand")}
-                  disabled={!watermarkConfig.showWatermark}
+                  disabled={!wm.showWatermark}
                   className="scale-75 origin-right"
                 />
               </div>
               <div className="flex items-center justify-between pl-3">
                 <span className="text-xs text-muted-foreground">显示日期</span>
                 <Switch
-                  checked={watermarkConfig.showDate}
+                  checked={wm.showDate}
                   onCheckedChange={() => toggleConfig("showDate")}
-                  disabled={!watermarkConfig.showWatermark}
+                  disabled={!wm.showWatermark}
                   className="scale-75 origin-right"
                 />
               </div>
               <div className="flex items-center justify-between pl-3">
                 <span className="text-xs text-muted-foreground">追加时分秒</span>
                 <Switch
-                  checked={watermarkConfig.showTime}
+                  checked={wm.showTime}
                   onCheckedChange={() => toggleConfig("showTime")}
-                  disabled={!watermarkConfig.showWatermark || !watermarkConfig.showDate}
+                  disabled={!wm.showWatermark || !wm.showDate}
                   className="scale-75 origin-right"
                 />
               </div>

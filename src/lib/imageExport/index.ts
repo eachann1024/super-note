@@ -2,5 +2,5 @@
 export type { CardTheme, CardThemeId } from "./themes";
 export { CARD_THEMES, getCardTheme } from "./themes";
 export type { WatermarkConfig } from "./watermark";
-export { DEFAULT_WATERMARK_CONFIG } from "./watermark";
+export { DEFAULT_WATERMARK_CONFIG, normalizeWatermarkConfig } from "./watermark";
 export { exportPageToImage, exportSelectionToImage, exportToImage } from "./renderer";

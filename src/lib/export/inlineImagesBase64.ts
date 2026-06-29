@@ -1,3 +1,4 @@
+import type { BlockNoteContent } from "@/components/editor/utils/blocknote-content";
 import { blobToBase64 } from "@/lib/imageStorage/utils";
 import {
   isLocalFilePath,
@@ -29,7 +30,9 @@ function guessMimeFromPath(filePath: string): string {
  * - 本地文件路径（绝对路径或 file://）→ fs 读取
  * - http(s) / 已是 base64 → 保留
  */
-export async function inlineImagesAsBase64(content: any[]): Promise<void> {
+export async function inlineImagesAsBase64(
+  content: BlockNoteContent,
+): Promise<void> {
   if (!Array.isArray(content)) return;
 
   for (const block of content) {
@@ -37,12 +40,13 @@ export async function inlineImagesAsBase64(content: any[]): Promise<void> {
 
     if (block.type === "image" && block.props?.url) {
       const src: string = block.props.url;
+      const mutableProps = block.props as { url: string };
 
       if (src.startsWith("uuid:") || src.startsWith("att:")) {
         try {
           const { imageStorage } = await getImageStorage();
           const blob = await imageStorage.load(src);
-          if (blob) block.props.url = await blobToBase64(blob);
+          if (blob) mutableProps.url = await blobToBase64(blob);
         } catch (e) {
           console.warn("[export] 内联图片失败 (uuid/att):", src, e);
         }
@@ -53,7 +57,7 @@ export async function inlineImagesAsBase64(content: any[]): Promise<void> {
         try {
           const base64 = readLocalFileAsBase64(src);
           if (base64) {
-            block.props.url = `data:${guessMimeFromPath(src)};base64,${base64}`;
+            mutableProps.url = `data:${guessMimeFromPath(src)};base64,${base64}`;
           }
         } catch (e) {
           console.warn("[export] 内联图片失败 (local file):", src, e);

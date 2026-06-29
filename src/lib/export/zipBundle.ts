@@ -2,13 +2,13 @@ import type { Page } from "@/types";
 import type { BlockNoteContent } from "@/components/editor/utils/blocknote-content";
 import type JSZipNs from "jszip";
 import { useNotebooks } from "@/stores/useNotebooks";
-import { extractTitleFromContent } from "@/components/editor/utils/content-text-extractor";
+import { getPageTitle } from "@/components/editor/utils/page-title";
 import { blobToBase64 } from "@/lib/imageStorage/utils";
 import {
   normalizePageContent,
   createEmptyBlockNoteContent,
 } from "@/components/editor/utils/blocknote-content";
-import { blocksToMarkdown, blocksToHTML } from "./blocknoteSerializer";
+import { buildExportMarkdown, buildExportHtmlBody } from "./pageMarkdown";
 import { renderExportHtml } from "./index";
 import { importFromMarkdown } from "./markdown/parse";
 import type { ImportResult } from "./markdown/parse";
@@ -18,13 +18,6 @@ import {
   resolveToAbsolute,
   readLocalFileAsBase64,
 } from "@/lib/imageStorage/strategies/file-system";
-
-function stripFirstH1(blocks: any[]): any[] {
-  if (blocks[0]?.type === "heading" && blocks[0]?.props?.level === 1) {
-    return blocks.slice(1);
-  }
-  return blocks;
-}
 
 let imageStoragePromise: Promise<{
   imageStorage: { load: (ref: string) => Promise<Blob | null> };
@@ -242,33 +235,36 @@ export async function generateExportZip(
 
       switch (format) {
         case "md": {
-          const title = extractTitleFromContent(pageClone.content);
-          const blocks = stripFirstH1(pageClone.content as any[]);
-          const md = await blocksToMarkdown(blocks as any);
-          content = `# ${title}\n\n${md}`;
+          content = await buildExportMarkdown(
+            pageClone,
+            pageClone.content,
+          );
           extension = ".md";
           break;
         }
         case "html": {
-          const titleForHtml = extractTitleFromContent(pageClone.content);
-          const blocks = stripFirstH1(pageClone.content as any[]);
-          const html = await blocksToHTML(blocks as any);
-          content = renderExportHtml(titleForHtml, html);
+          const bodyHtml = await buildExportHtmlBody(
+            pageClone,
+            pageClone.content,
+          );
+          content = renderExportHtml(
+            getPageTitle(pageClone),
+            bodyHtml,
+            !pageClone.localFilePath
+          );
           extension = ".html";
           break;
         }
       }
 
-      const fileName =
-        sanitizeFileName(
-          extractTitleFromContent(pageClone.content) || "untitled",
-        ) + extension;
+      const exportTitle = getPageTitle(pageClone) || "untitled";
+      const fileName = sanitizeFileName(exportTitle) + extension;
       parentFolder.file(fileName, content);
 
       const children = notebookPages.filter((p) => p.parentId === page.id);
       if (children.length > 0) {
         const subFolderName = sanitizeFileName(
-          extractTitleFromContent(page.content) || "untitled",
+          getPageTitle(pageClone) || "untitled",
         );
         const subFolder = parentFolder.folder(subFolderName);
         if (subFolder) {

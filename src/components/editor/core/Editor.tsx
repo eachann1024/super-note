@@ -61,10 +61,18 @@ import { gooseFakeSelectionExtension } from "@/components/editor/extensions/fake
 import { ArrowInputRuleExtension } from "@/components/editor/inputrules/arrowInputRule";
 import { gooseToggleHeadingInputRuleExtension } from "@/components/editor/inputrules/toggleHeadingInputRule";
 import { gooseFindInPageExtension } from "@/components/editor/find/findInPagePlugin";
+import { createGooseSlashMenuReconcileExtension } from "@/components/editor/extensions/gooseSlashMenuReconcileExtension";
+import { reconcileSlashSuggestionMenu } from "@/components/editor/utils/slashMenuPolicy";
 import { EditorComposer, editorSchema, getSelectedCellPlainText, getSelectedPlainTextContext, isBottomEditorBlankClick, normalizeClipboardLineEndings, shouldPreferVisibleSelectionText, stripMarkdownHardBreaks } from "./EditorComposer";
 import { isLinkworthyText } from "@/components/editor/utils/clipboard";
 import { useEditorShortcuts } from "@/components/editor/hooks/useEditorShortcuts";
 import { useEditorPaste } from "@/components/editor/hooks/useEditorPaste";
+import { pasteClipboardFilesFromClipboard } from "@/components/editor/utils/pasteClipboardFilesFromClipboard";
+import {
+  clipboardHasPasteableImage,
+  resolveImageMimeForUpload,
+  shouldUploadViaImageStorage,
+} from "@/components/editor/utils/pasteClipboardImage";
 
 export interface EditorRef {
   editor: ReturnType<typeof useCreateBlockNote> | null;
@@ -126,6 +134,8 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
   // 同 aiSettingsRef 模式，避免闭包捕获旧 platform 引用。
   const platformRef = useRef(platform);
   platformRef.current = platform;
+  /** uploadFile 与同 tick 粘贴需 getBlock；每 render 同步 */
+  const editorInstanceRef = useRef<ReturnType<typeof useCreateBlockNote> | null>(null);
 
   // local-folder 页面跳过 normalizePageContent（含 ensureFirstTitleHeading），
   // 内容保持磁盘解析原样，避免 normalize 引发的结构变化误触写盘。
@@ -202,6 +212,7 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
         gooseToggleHeadingAutoCollectExtension(),
         gooseCrossBlockDeleteExtension,
         gooseEmptyBlockBackspaceExtension,
+        createGooseSlashMenuReconcileExtension(isLocalFolderPageRef, editorInstanceRef),
         gooseQuoteInputRuleExtension,
         gooseMarkdownInputRulesExtension,
         gooseFakeSelectionExtension,
@@ -239,11 +250,25 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
           class: "goose-blocknote-editor",
         },
       },
-      uploadFile: async (file) => {
-        if (file.type.startsWith("image/")) {
-          return platformRef.current.imageStorage.save(file, file.type);
+      uploadFile: async (file, blockId) => {
+        if (
+          shouldUploadViaImageStorage(
+            file,
+            blockId,
+            (id) => editorInstanceRef.current?.getBlock(id),
+          )
+        ) {
+          const mime = resolveImageMimeForUpload(file);
+          return platformRef.current.imageStorage.save(file, mime);
         }
         return URL.createObjectURL(file);
+      },
+      pasteHandler: ({ event, editor: ed, defaultPasteHandler }) => {
+        if (clipboardHasPasteableImage(event.clipboardData)) {
+          void pasteClipboardFilesFromClipboard(event, ed);
+          return true;
+        }
+        return defaultPasteHandler();
       },
       resolveFileUrl: async (url) => {
         return platformRef.current.imageStorage.resolveRefToUrl(
@@ -274,6 +299,7 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
     },
     [],
   );
+  editorInstanceRef.current = editor;
 
   const debouncedUpdate = useMemo(() => {
     return createDebounce(
@@ -540,66 +566,17 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
     };
   }, []);
 
-  // 中文输入法（IME）斜杠菜单修复：BlockNote 0.51 的 suggestion 插件没有 composition
-  // 防护——用输入法上屏中文 query（如「、表格」）时，上屏那一刻的 replace transaction
-  // 命中插件内部的关闭判定，菜单被关掉、query 丢失（英文逐字符输入不经 composition 故正常）。
-  // 这里在 compositionend 后检测「当前块以触发符开头但菜单未显示」，程序化重新打开菜单
-  // 并恢复 query：把光标移到触发符之后 → openSuggestionMenu 钉住 queryStartPos →
-  // 光标移回上屏位置，query 即按 textBetween(触发符后, 光标) 自然算出。
   useEffect(() => {
     const container = editorContainerRef.current;
     if (!container) return;
-
-    const TRIGGERS = ["、", "/"] as const;
-
-    const rebuildSlashMenu = () => {
-      if (!editor.isEditable) return;
-      const sug = (editor.getExtension as any)("suggestionMenu") as
-        | { shown: () => boolean; openSuggestionMenu: (trigger: string) => void }
-        | undefined;
-      // 菜单已显示则无需重建（避免与正常输入路径重复触发）
-      if (!sug || sug.shown()) return;
-
-      const view = editor.prosemirrorView;
-      if (!view) return;
-      const { selection } = view.state;
-      if (!selection.empty) return;
-
-      const $from = selection.$from;
-      const parent = $from.parent;
-      // 仅在文本块内、非代码块、非表格单元格内重建（与正常 slash 菜单的 shouldOpen 一致）
-      if (!parent.isTextblock || parent.type.spec.code) return;
-      if (parent.type.isInGroup("tableContent")) return;
-
-      const trigger = TRIGGERS.find((t) => parent.textContent.startsWith(t));
-      if (!trigger) return; // 触发符必须在块开头
-
-      const blockStart = $from.start();
-      const caret = selection.from;
-      if (caret <= blockStart) return; // 光标必须落在触发符之后
-
-      // A：光标移到触发符之后，作为 query 起点
-      view.dispatch(
-        view.state.tr.setSelection(
-          TextSelection.create(view.state.doc, blockStart + trigger.length),
-        ),
+    const onCompositionEnd = () =>
+      queueMicrotask(() =>
+        reconcileSlashSuggestionMenu(editor, {
+          allowSlashMenuOnFirstBlock: isLocalFolderPageRef.current,
+        }),
       );
-      // B：打开菜单（queryStartPos 钉在当前光标）
-      sug.openSuggestionMenu(trigger);
-      // C：光标移回上屏后的位置，query 自然算出
-      view.dispatch(
-        view.state.tr.setSelection(TextSelection.create(view.state.doc, caret)),
-      );
-    };
-
-    const handleCompositionEnd = () => {
-      // 等 ProseMirror 把 composition 落地进文档后再处理
-      requestAnimationFrame(rebuildSlashMenu);
-    };
-
-    container.addEventListener("compositionend", handleCompositionEnd);
-    return () =>
-      container.removeEventListener("compositionend", handleCompositionEnd);
+    container.addEventListener("compositionend", onCompositionEnd);
+    return () => container.removeEventListener("compositionend", onCompositionEnd);
   }, [editor]);
 
   const commitEditorContent = useCallback(

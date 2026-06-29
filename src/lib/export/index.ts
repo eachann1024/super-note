@@ -1,6 +1,7 @@
 import type { Page } from "@/types";
 import type { BlockNoteContent } from "@/components/editor/utils/blocknote-content";
 import { extractTitleFromContent } from "@/components/editor/utils/content-text-extractor";
+import { getPageTitle } from "@/components/editor/utils/page-title";
 import {
   normalizePageContent,
   createEmptyBlockNoteContent,
@@ -11,6 +12,7 @@ import {
   EXPORT_HTML_HEAD_ASSETS,
   EXPORT_HTML_BODY_SCRIPTS,
 } from "./blocknoteSerializer";
+import { buildExportMarkdown, buildExportHtmlBody } from "./pageMarkdown";
 import { inlineImagesAsBase64 } from "./inlineImagesBase64";
 import { importFromMarkdown, type ImportResult } from "./markdown/parse";
 import { saveBlobAndReveal, triggerBrowserDownload } from "./fileSave";
@@ -31,15 +33,8 @@ export {
 export { saveBlobAndReveal } from "./fileSave";
 export { exportToPDF } from "@/lib/pdfExport";
 
-function cloneContent(content: BlockNoteContent): any[] {
-  return structuredClone(content ?? []) as any[];
-}
-
-function stripFirstH1(blocks: any[]): any[] {
-  if (blocks[0]?.type === "heading" && blocks[0]?.props?.level === 1) {
-    return blocks.slice(1);
-  }
-  return blocks;
+function cloneExportBlocks(content: BlockNoteContent): BlockNoteContent {
+  return structuredClone(content ?? []) as BlockNoteContent;
 }
 
 async function downloadBlob(blob: Blob, filename: string) {
@@ -67,7 +62,7 @@ function downloadFile(content: string, filename: string, contentType: string) {
 
 export function exportToJSON(page: Page) {
   const data = JSON.stringify(page, null, 2);
-  const title = extractTitleFromContent(page.content);
+  const title = getPageTitle(page);
   downloadFile(data, `${title || "untitled"}.json`, "application/json");
 }
 
@@ -80,24 +75,38 @@ function escapeHtmlText(value: string): string {
 }
 
 export async function exportToMarkdown(page: Page) {
-  const blocks = stripFirstH1(cloneContent(page.content));
+  const blocks = cloneExportBlocks(
+    Array.isArray(page.content)
+      ? (page.content as BlockNoteContent)
+      : normalizePageContent(page.content),
+  );
   await inlineImagesAsBase64(blocks);
-  const markdown = await blocksToMarkdown(blocks);
-  const title = extractTitleFromContent(page.content);
-  const fullMarkdown = `# ${title}\n\n${markdown}`;
+  const fullMarkdown = await buildExportMarkdown(page, blocks);
+  const title = getPageTitle(page);
   downloadFile(fullMarkdown, `${title || "untitled"}.md`, "text/markdown");
 }
 
 export async function exportToHTML(page: Page) {
-  const blocks = stripFirstH1(cloneContent(page.content));
+  const blocks = cloneExportBlocks(
+    Array.isArray(page.content)
+      ? (page.content as BlockNoteContent)
+      : normalizePageContent(page.content),
+  );
   await inlineImagesAsBase64(blocks);
-  const bodyHtml = await blocksToHTML(blocks);
-  const title = extractTitleFromContent(page.content);
-  const fullHtml = renderExportHtml(title, bodyHtml);
+  const bodyHtml = await buildExportHtmlBody(page, blocks);
+  const title = getPageTitle(page);
+  const fullHtml = renderExportHtml(title, bodyHtml, !page.localFilePath);
   downloadFile(fullHtml, `${title || "untitled"}.html`, "text/html");
 }
 
-export function renderExportHtml(title: string, bodyHtml: string): string {
+export function renderExportHtml(
+  title: string,
+  bodyHtml: string,
+  includeBodyH1 = true,
+): string {
+  const bodyHeading = includeBodyH1
+    ? `<h1>${escapeHtmlText(title)}</h1>\n`
+    : "";
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -124,8 +133,7 @@ input[type="checkbox"] { margin-right: 0.4em; }
 </style>
 </head>
 <body>
-<h1>${escapeHtmlText(title)}</h1>
-${bodyHtml}
+${bodyHeading}${bodyHtml}
 ${EXPORT_HTML_BODY_SCRIPTS}
 </body>
 </html>`;
@@ -136,9 +144,17 @@ export function importFromJSON(
   filename?: string,
 ): ImportResult {
   try {
-    const data = JSON.parse(jsonString) as any;
-
-    if (!data.content || typeof data.content !== "object") {
+    const data: unknown = JSON.parse(jsonString);
+    if (!data || typeof data !== "object" || !("content" in data)) {
+      return {
+        title: "",
+        content: createEmptyBlockNoteContent(),
+        success: false,
+        error: "无效的 JSON 格式：缺少 content 字段",
+      };
+    }
+    const record = data as Record<string, unknown>;
+    if (!record.content || typeof record.content !== "object") {
       return {
         title: "",
         content: createEmptyBlockNoteContent(),
@@ -148,18 +164,21 @@ export function importFromJSON(
     }
 
     let title = filename || "导入的页面";
-    if ("title" in data && data.title) {
-      title = data.title;
+    if (typeof record.title === "string" && record.title) {
+      title = record.title;
     } else {
-      title = extractTitleFromContent(data.content) || filename || "导入的页面";
+      title =
+        extractTitleFromContent(record.content as BlockNoteContent) ||
+        filename ||
+        "导入的页面";
     }
 
     return {
       title,
-      content: normalizePageContent(data.content),
+      content: normalizePageContent(record.content),
       success: true,
     };
-  } catch (e) {
+  } catch {
     return {
       title: "",
       content: createEmptyBlockNoteContent(),

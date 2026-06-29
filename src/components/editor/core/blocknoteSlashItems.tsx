@@ -16,6 +16,15 @@ export interface SlashMenuItem {
   onItemClick: () => void;
 }
 
+export function isSlashMenuDivider(item: SlashMenuItem): boolean {
+  return (
+    typeof item === "object" &&
+    item !== null &&
+    "type" in item &&
+    (item as { type?: string }).type === "divider"
+  );
+}
+
 export function getBlockNoteSlashMenuItems(
   editor: BlockNoteEditor<any, any, any>,
   aiEnabled: boolean,
@@ -348,6 +357,27 @@ export function getBlockNoteSlashMenuItems(
     },
   );
 
+  let menuItems = items;
+
+  // 速记小窗：精简斜杠菜单（无预览/重结构块）；标注、图片按产品保留。
+  if (__GOOSE_LITE__) {
+    const quicknoteSlashTitles = new Set([
+      "一级标题",
+      "二级标题",
+      "待办事项",
+      "无序列表",
+      "有序列表",
+      "引用",
+      "标注",
+      "分隔线",
+      "代码块",
+      "图片",
+    ]);
+    menuItems = menuItems.filter(
+      (it) => !isSlashMenuDivider(it) && quicknoteSlashTitles.has(it.title),
+    );
+  }
+
   // 折叠块内部隐藏「折叠标题/折叠列表」项,避免无限折叠嵌套(任意后代)。
   // 输入规则侧也做了同样拦截(见 toggleHeadingInputRule)。光标此时已在目标块。
   const currentBlock = editor.getTextCursorPosition().block;
@@ -358,10 +388,10 @@ export function getBlockNoteSlashMenuItems(
       "折叠三级标题",
       "折叠列表",
     ]);
-    return items.filter((it) => !TOGGLE_TITLES.has(it.title));
+    return menuItems.filter((it) => !TOGGLE_TITLES.has(it.title));
   }
 
-  return items;
+  return menuItems;
 }
 
 export function filterSlashMenuItems(

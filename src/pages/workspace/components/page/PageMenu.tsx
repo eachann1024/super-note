@@ -64,8 +64,9 @@ export function PageMenu() {
 
   const handleThemeConfirm = (themeId: CardThemeId, watermarkConfig: WatermarkConfig) => {
     if (!page) return;
-    if (selectedBlocks.length > 0) {
-      exportSelectionToImage(selectedBlocks, extractBlockNoteTitle(page.content) || "选中内容", themeId, watermarkConfig);
+    const blocks = getEditorSelectedBlocks();
+    if (blocks.length > 0) {
+      exportSelectionToImage(blocks, extractBlockNoteTitle(page.content) || "选中内容", themeId, watermarkConfig);
     } else {
       exportPageToImage(page, themeId, watermarkConfig);
     }
@@ -150,7 +151,10 @@ export function PageMenu() {
         {/* Generate Image — standalone, before Export */}
         <DropdownMenuItem
           className="page-menu-generate-image grid grid-cols-[16px_minmax(0,1fr)_auto] gap-x-2 text-xs text-foreground"
-          onSelect={() => setThemeSelectorOpen(true)}
+          onSelect={() => {
+            setSelectedBlocks(getEditorSelectedBlocks());
+            setThemeSelectorOpen(true);
+          }}
         >
           <LucideIcons.Image className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="page-menu-shimmer-text min-w-0 truncate font-medium text-foreground">

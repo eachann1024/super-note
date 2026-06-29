@@ -37,6 +37,8 @@ import { EditorFilePanel } from "@/components/editor/menus/EditorFilePanel";
 import { GooseTableHandle, GooseTableExtendButton } from "@/components/editor/menus/GooseTableHandle";
 import { EditorContextMenu } from "@/components/editor/menus/EditorContextMenu";
 import { editorSchema } from "@/components/editor/core/schema";
+import { shouldOpenSlashSuggestionMenu } from "@/components/editor/utils/slashMenuPolicy";
+import { getQuicknoteSlashMenuFloatingOptions } from "@/components/editor/utils/quicknoteSlashMenuFloating";
 import { LocalFileTitle } from "@/pages/workspace/components/page/LocalFileTitle";
 
 // Re-exports to prevent broken imports elsewhere
@@ -203,6 +205,11 @@ export function EditorComposer({
     ],
   );
 
+  const slashMenuFloatingOptions = useMemo(
+    () => (__GOOSE_LITE__ ? getQuicknoteSlashMenuFloatingOptions() : undefined),
+    [],
+  );
+
   return (
     <EditorContextMenu
       editor={editor}
@@ -276,19 +283,14 @@ export function EditorComposer({
         <SuggestionMenuController
           triggerCharacter="/"
           getItems={getSlashItems}
-          shouldOpen={(event) => {
-            const $from = event.selection.$from;
-            // 首块是「文件名标题」(恒为 H1，见 emptyContent / firstTitleGuard)，
-            // 不允许被转成任何其它块类型，故首块行内一律不弹 slash 菜单。
-            // local-folder 页面例外：标题由 LocalFileTitle 独立渲染，首块是普通正文。
-            if (!page?.localFilePath) {
-              const cursorBlock = editor.getTextCursorPosition().block;
-              if (cursorBlock && cursorBlock.id === editor.document[0]?.id) return false;
-            }
-            if ($from.parentOffset !== 0) return false; // 仅行首触发
-            return !$from.parent.type.isInGroup("tableContent");
-          }}
-          suggestionMenuComponent={CustomSlashMenu}
+          floatingUIOptions={slashMenuFloatingOptions}
+          shouldOpen={(event) =>
+            shouldOpenSlashSuggestionMenu(event, editor, {
+              allowSlashMenuOnFirstBlock:
+                Boolean(page?.localFilePath) || page?.id === "__quicknote_draft__",
+            })
+          }
+          suggestionMenuComponent={CustomSlashMenu as any}
           onItemClick={(item) => {
             if (item && "onItemClick" in item) {
               (item as any).onItemClick();
@@ -298,17 +300,14 @@ export function EditorComposer({
         <SuggestionMenuController
           triggerCharacter="、"
           getItems={getSlashItems}
-          shouldOpen={(event) => {
-            const $from = event.selection.$from;
-            // 同上：首块为文件名标题，不弹 slash 菜单（local-folder 页面例外）。
-            if (!page?.localFilePath) {
-              const cursorBlock = editor.getTextCursorPosition().block;
-              if (cursorBlock && cursorBlock.id === editor.document[0]?.id) return false;
-            }
-            if ($from.parentOffset !== 0) return false; // 仅行首触发
-            return !$from.parent.type.isInGroup("tableContent");
-          }}
-          suggestionMenuComponent={CustomSlashMenu}
+          floatingUIOptions={slashMenuFloatingOptions}
+          shouldOpen={(event) =>
+            shouldOpenSlashSuggestionMenu(event, editor, {
+              allowSlashMenuOnFirstBlock:
+                Boolean(page?.localFilePath) || page?.id === "__quicknote_draft__",
+            })
+          }
+          suggestionMenuComponent={CustomSlashMenu as any}
           onItemClick={(item) => {
             if (item && "onItemClick" in item) {
               (item as any).onItemClick();

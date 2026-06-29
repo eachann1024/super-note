@@ -284,6 +284,7 @@ export default defineConfig({
     alias: [
       ...liteStubAliases,
       { find: "@host-runtime", replacement: path.resolve(__dirname, "./src/lib/host/runtime.utools.ts") },
+
       { find: "@", replacement: path.resolve(__dirname, "./src") },
     ],
   },

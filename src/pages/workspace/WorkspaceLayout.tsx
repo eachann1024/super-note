@@ -98,6 +98,11 @@ export function WorkspaceLayout({
       window.removeEventListener("goose-note:toggle-ai-panel", onToggle);
   }, [aiEnabled, toggleAiPanel]);
 
+  // AI 功能关闭时强制收起侧栏面板，避免 localStorage 仍为 true 导致下次开启后误展开
+  useEffect(() => {
+    if (!aiEnabled) closeAiPanel();
+  }, [aiEnabled, closeAiPanel]);
+
   useEffect(() => {
     if (locateRetryRef.current) {
       clearTimeout(locateRetryRef.current);

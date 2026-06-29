@@ -8,6 +8,7 @@ import {
   normalizeMarkdownPasteText,
   parseMarkdownLink,
 } from "../utils/clipboard";
+import { clipboardHasPasteableImage } from "../utils/pasteClipboardImage";
 
 type Editor = ReturnType<typeof useCreateBlockNote>;
 
@@ -25,6 +26,7 @@ export function useEditorPaste({
   const handleEditorPasteCapture = useCallback(
     (event: React.ClipboardEvent<HTMLDivElement>) => {
       if (!editable) return;
+      if (clipboardHasPasteableImage(event.clipboardData)) return;
       if (event.defaultPrevented) return;
       if (shiftPressedRef.current) return;
       if ((event.target as HTMLElement | null)?.closest(".goose-code-block-node")) return;

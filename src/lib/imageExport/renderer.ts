@@ -5,6 +5,7 @@ import { toPng } from "html-to-image";
 import type { CardThemeId } from "./themes";
 import { getCardTheme } from "./themes";
 import type { WatermarkConfig } from "./watermark";
+import { normalizeWatermarkConfig } from "./watermark";
 import { buildStyledHTML, renderBlock } from "./domSerializer";
 import { resolveImageUrls } from "./remoteImageResolver";
 
@@ -173,9 +174,10 @@ export async function exportPageToImage(
   watermarkConfig?: WatermarkConfig,
 ) {
   const theme = getCardTheme(themeId);
+  const wm = normalizeWatermarkConfig(watermarkConfig);
   const title = extractTitleFromContent(page.content);
   const content = structuredClone(page.content) as BlockNoteContent;
-  await resolveImageUrls(content as any[]);
+  await resolveImageUrls(content);
 
   const container = document.createElement("div");
   container.style.position = "fixed";
@@ -185,11 +187,15 @@ export async function exportPageToImage(
   document.body.appendChild(container);
 
   try {
-    // 跳过第一个 heading，避免标题重复
     const firstBlock = content[0];
-    const blocksToRender = firstBlock?.type === "heading" ? content.slice(1) : content;
-    const blocksHtml = blocksToRender.map((block: any) => renderBlock(block, theme)).join("\n");
-    const html = buildStyledHTML({ title, blocksHtml, theme, watermarkConfig });
+    const blocksToRender =
+      wm.showTitle && firstBlock?.type === "heading"
+        ? content.slice(1)
+        : content;
+    const blocksHtml = blocksToRender
+      .map((block) => renderBlock(block, theme))
+      .join("\n");
+    const html = buildStyledHTML({ title, blocksHtml, theme, watermarkConfig: wm });
     container.innerHTML = html;
 
     const cardElement = container.querySelector(".gooseshot-container") as HTMLElement;
@@ -211,10 +217,10 @@ export async function exportSelectionToImage(
   if (!Array.isArray(selectionBlocks) || selectionBlocks.length === 0) return;
 
   const theme = getCardTheme(themeId);
+  const wm = normalizeWatermarkConfig(watermarkConfig);
   const title = pageTitle || "选中内容";
 
-  // Deep clone to avoid mutating the original blocks
-  const clonedBlocks = structuredClone(selectionBlocks) as any[];
+  const clonedBlocks = structuredClone(selectionBlocks) as BlockNoteContent;
   await resolveImageUrls(clonedBlocks);
 
   const container = document.createElement("div");
@@ -226,7 +232,7 @@ export async function exportSelectionToImage(
 
   try {
     const blocksHtml = clonedBlocks
-      .map((block: any) => renderBlock(block, theme))
+      .map((block) => renderBlock(block, theme))
       .join("\n");
 
     const html = buildStyledHTML({
@@ -234,7 +240,7 @@ export async function exportSelectionToImage(
       blocksHtml,
       theme,
       isSelection: true,
-      watermarkConfig,
+      watermarkConfig: wm,
     });
     container.innerHTML = html;
 

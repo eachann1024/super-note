@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Kbd } from "@/components/editor/ui/kbd";
 import { Button } from "@/components/editor/ui/button";
 import type { SlashMenuItem } from "./blocknoteSlashItems";
+import { isSlashMenuDivider } from "./blocknoteSlashItems";
 
 interface CustomSlashMenuProps {
   items: SlashMenuItem[];
@@ -14,19 +15,66 @@ interface CustomSlashMenuProps {
   onItemClick?: (item: SlashMenuItem) => void;
 }
 
+const KEYBOARD_NAV_IGNORE_MOUSE_MS = 700;
+const SCROLL_ANIM_MS = 180;
+const SCROLL_EDGE_PADDING_PX = 10;
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
+function clampScrollTop(container: HTMLElement, top: number): number {
+  const max = Math.max(0, container.scrollHeight - container.clientHeight);
+  return Math.max(0, Math.min(top, max));
+}
+
+function scrollTopToRevealItem(
+  container: HTMLElement,
+  itemEl: HTMLElement,
+): number | null {
+  const viewTop = container.scrollTop;
+  const viewBottom = viewTop + container.clientHeight;
+  const pad = SCROLL_EDGE_PADDING_PX;
+  const itemTop = itemEl.offsetTop;
+  const itemBottom = itemTop + itemEl.offsetHeight;
+
+  if (itemTop >= viewTop + pad && itemBottom <= viewBottom - pad) {
+    return null;
+  }
+
+  let next = viewTop;
+  if (itemTop < viewTop + pad) {
+    next = itemTop - pad;
+  } else if (itemBottom > viewBottom - pad) {
+    next = itemBottom - container.clientHeight + pad;
+  }
+  return clampScrollTop(container, next);
+}
+
+interface ScrollTween {
+  from: number;
+  to: number;
+  startMs: number;
+  durationMs: number;
+}
+
 const CustomSlashMenu = forwardRef<HTMLDivElement, CustomSlashMenuProps>(
   ({ items, selectedIndex: externalIndex, onItemClick }, _ref) => {
     const [selectedIndex, setSelectedIndex] = useState(externalIndex ?? 0);
-    const [showHint, setShowHint] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const suggestionMenu = useExtension(SuggestionMenu);
-    const wrapScrollRef = useRef<null | "top" | "bottom">(null);
+    const ignoreMouseEnterUntilRef = useRef(0);
+    const lastKeyboardNavAtRef = useRef(0);
+    const scrollTweenRef = useRef<ScrollTween | null>(null);
+    const scrollRafRef = useRef(0);
+    const suppressHoverTimerRef = useRef<number | null>(null);
+    const [suppressItemHover, setSuppressItemHover] = useState(false);
 
     const selectableIndexes = useMemo(
       () =>
         items
           .map((item, index) => ({ item, index }))
-          .filter(({ item }) => (item as any).type !== "divider" && !item.disabled)
+          .filter(({ item }) => !isSlashMenuDivider(item) && !item.disabled)
           .map(({ index }) => index),
       [items],
     );
@@ -34,52 +82,129 @@ const CustomSlashMenu = forwardRef<HTMLDivElement, CustomSlashMenuProps>(
     const selectItem = useCallback(
       (index: number) => {
         const item = items[index];
-        if (item && (item as any).type !== "divider" && !item.disabled) {
-          // 必须经由 props.onItemClick 调用，让 SuggestionMenuWrapper 的
-          // onItemClickCloseMenu 先执行 closeMenu() + clearQuery()，再回调
-          // item.onItemClick()。直接调用 item.onItemClick() 会绕过 closeMenu/
-          // clearQuery，导致查询词残留进块内容、菜单不关闭。
+        if (item && !isSlashMenuDivider(item) && !item.disabled) {
           onItemClick?.(item);
         }
       },
       [items, onItemClick],
     );
 
+    const readAnimatedScrollTop = useCallback((): number => {
+      const container = containerRef.current;
+      if (!container) return 0;
+      const tween = scrollTweenRef.current;
+      if (!tween) return container.scrollTop;
+      const elapsed = performance.now() - tween.startMs;
+      const t = Math.min(1, elapsed / tween.durationMs);
+      return tween.from + (tween.to - tween.from) * easeOutCubic(t);
+    }, []);
+
+    const cancelScrollAnimation = useCallback(() => {
+      if (scrollRafRef.current !== 0) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = 0;
+      }
+      scrollTweenRef.current = null;
+    }, []);
+
+    const startScrollTo = useCallback(
+      (to: number) => {
+        const container = containerRef.current;
+        if (!container) return;
+        const from = readAnimatedScrollTop();
+        if (Math.abs(to - from) < 0.5) {
+          container.scrollTop = to;
+          cancelScrollAnimation();
+          return;
+        }
+        scrollTweenRef.current = {
+          from,
+          to,
+          startMs: performance.now(),
+          durationMs: SCROLL_ANIM_MS,
+        };
+        const tick = () => {
+          const el = containerRef.current;
+          const active = scrollTweenRef.current;
+          if (!el || !active) {
+            scrollRafRef.current = 0;
+            return;
+          }
+          const elapsed = performance.now() - active.startMs;
+          const t = Math.min(1, elapsed / active.durationMs);
+          el.scrollTop =
+            active.from + (active.to - active.from) * easeOutCubic(t);
+          if (t >= 1) {
+            el.scrollTop = active.to;
+            scrollTweenRef.current = null;
+            scrollRafRef.current = 0;
+            return;
+          }
+          scrollRafRef.current = requestAnimationFrame(tick);
+        };
+        if (scrollRafRef.current !== 0) {
+          cancelAnimationFrame(scrollRafRef.current);
+        }
+        scrollRafRef.current = requestAnimationFrame(tick);
+      },
+      [cancelScrollAnimation, readAnimatedScrollTop],
+    );
+
+    const beginKeyboardNav = useCallback(() => {
+      const now = Date.now();
+      lastKeyboardNavAtRef.current = now;
+      ignoreMouseEnterUntilRef.current = now + KEYBOARD_NAV_IGNORE_MOUSE_MS;
+      setSuppressItemHover(true);
+      if (suppressHoverTimerRef.current !== null) {
+        window.clearTimeout(suppressHoverTimerRef.current);
+      }
+      suppressHoverTimerRef.current = window.setTimeout(() => {
+        suppressHoverTimerRef.current = null;
+        setSuppressItemHover(false);
+      }, KEYBOARD_NAV_IGNORE_MOUSE_MS);
+    }, []);
+
     useEffect(() => {
       if (items.length === 0) {
-        // Notion-style: close menu immediately when no matches
         const timer = setTimeout(() => suggestionMenu?.closeMenu(), 0);
         return () => clearTimeout(timer);
       }
       if (selectableIndexes.length === 0) {
         setSelectedIndex(0);
-      } else if (externalIndex !== undefined && selectableIndexes.includes(externalIndex)) {
-        setSelectedIndex(externalIndex);
-      } else {
+      } else if (!selectableIndexes.includes(selectedIndex)) {
         setSelectedIndex(selectableIndexes[0]);
       }
-      setShowHint(false);
-    }, [items, selectableIndexes, externalIndex, suggestionMenu]);
+    }, [items, selectableIndexes, selectedIndex, suggestionMenu]);
+
+    useEffect(() => {
+      return () => {
+        if (suppressHoverTimerRef.current !== null) {
+          window.clearTimeout(suppressHoverTimerRef.current);
+        }
+        cancelScrollAnimation();
+      };
+    }, [cancelScrollAnimation]);
 
     useEffect(() => {
       const container = containerRef.current;
       if (!container) return;
-      // 循环跳转：直接把菜单拉到顶/底，让用户看到完整边界
-      if (wrapScrollRef.current === "bottom") {
-        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-        wrapScrollRef.current = null;
-        return;
-      }
-      if (wrapScrollRef.current === "top") {
-        container.scrollTo({ top: 0, behavior: "smooth" });
-        wrapScrollRef.current = null;
-        return;
-      }
       const selectedEl = container.querySelector(
         `[data-index="${selectedIndex}"]`,
       ) as HTMLElement | null;
-      selectedEl?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }, [selectedIndex]);
+      if (!selectedEl) return;
+
+      const target = scrollTopToRevealItem(container, selectedEl);
+      if (target === null) return;
+
+      const fromKeyboard =
+        Date.now() - lastKeyboardNavAtRef.current < KEYBOARD_NAV_IGNORE_MOUSE_MS;
+      if (fromKeyboard) {
+        startScrollTo(target);
+      } else {
+        cancelScrollAnimation();
+        container.scrollTop = target;
+      }
+    }, [selectedIndex, startScrollTo, cancelScrollAnimation]);
 
     useEffect(() => {
       const handler = (e: KeyboardEvent) => {
@@ -93,10 +218,9 @@ const CustomSlashMenu = forwardRef<HTMLDivElement, CustomSlashMenuProps>(
         if (e.key === "ArrowUp") {
           e.preventDefault();
           e.stopPropagation();
+          beginKeyboardNav();
           const pos = Math.max(selectableIndexes.indexOf(selectedIndex), 0);
           if (pos === 0) {
-            // 循环到末尾，并把容器滚到底
-            wrapScrollRef.current = "bottom";
             setSelectedIndex(selectableIndexes[selectableIndexes.length - 1]);
           } else {
             setSelectedIndex(selectableIndexes[pos - 1]);
@@ -104,10 +228,9 @@ const CustomSlashMenu = forwardRef<HTMLDivElement, CustomSlashMenuProps>(
         } else if (e.key === "ArrowDown") {
           e.preventDefault();
           e.stopPropagation();
+          beginKeyboardNav();
           const pos = Math.max(selectableIndexes.indexOf(selectedIndex), 0);
           if (pos === selectableIndexes.length - 1) {
-            // 循环到开头，并把容器滚到顶
-            wrapScrollRef.current = "top";
             setSelectedIndex(selectableIndexes[0]);
           } else {
             setSelectedIndex(selectableIndexes[pos + 1]);
@@ -123,25 +246,47 @@ const CustomSlashMenu = forwardRef<HTMLDivElement, CustomSlashMenuProps>(
       };
       window.addEventListener("keydown", handler, true);
       return () => window.removeEventListener("keydown", handler, true);
-    }, [selectedIndex, selectItem, selectableIndexes]);
+    }, [selectedIndex, selectItem, selectableIndexes, beginKeyboardNav]);
 
     if (items.length === 0) {
       return null;
     }
 
+    const lite = __GOOSE_LITE__;
+
     return (
-      <div className="workspace-shell bg-transparent rounded-[var(--radius-notion-slash)] overflow-hidden" data-notion-slash-root="true">
+      <div
+        className="workspace-shell flex max-h-[inherit] min-h-0 flex-col overflow-hidden bg-transparent"
+        data-notion-slash-root="true"
+        {...(lite ? { "data-goose-slash-lite": "true" } : {})}
+      >
         <div
           data-notion-slash-surface="true"
-          className="z-50 w-[280px] rounded-[var(--radius-notion-slash)] border border-border/75 bg-popover p-1.5 text-popover-foreground shadow-[0_14px_34px_rgba(15,23,42,0.16),0_2px_8px_rgba(15,23,42,0.08)]"
+          className={cn(
+            "z-50 flex min-h-0 max-h-full min-w-0 flex-col border border-border/75 bg-popover text-popover-foreground shadow-[0_14px_34px_rgba(15,23,42,0.16),0_2px_8px_rgba(15,23,42,0.08)]",
+            lite
+              ? "w-[248px] overflow-hidden rounded-xl p-1"
+              : "w-[280px] rounded-[var(--radius-notion-slash)] p-1.5",
+          )}
         >
-          <div ref={containerRef} className="max-h-[320px] overflow-y-auto overscroll-contain">
+          <div
+            ref={containerRef}
+            data-notion-slash-scroll={lite ? "" : undefined}
+            className={cn(
+              "min-h-0 flex-1 overflow-y-auto overscroll-contain",
+              lite ? "max-h-full pb-2" : "max-h-[min(20rem,100%)] pb-1",
+              suppressItemHover && "pointer-events-none",
+            )}
+          >
             <TooltipProvider delayDuration={600}>
-              <div className="flex flex-col gap-0.5">
+              <div className={cn("flex flex-col", lite ? "gap-0" : "gap-0.5")}>
                 {items.map((item, index) => {
-                  if ((item as any).type === "divider") {
+                  if (isSlashMenuDivider(item)) {
                     return (
-                      <div key={`divider-${index}`} className="mx-2 my-1 h-px bg-border/60" />
+                      <div
+                        key={`divider-${index}`}
+                        className={cn("mx-2 h-px bg-border/60", lite ? "my-0.5" : "my-1")}
+                      />
                     );
                   }
 
@@ -151,13 +296,25 @@ const CustomSlashMenu = forwardRef<HTMLDivElement, CustomSlashMenuProps>(
                       variant="ghost"
                       data-index={index}
                       className={cn(
-                        "relative flex h-auto min-h-[40px] w-full items-center justify-start rounded-[var(--radius-notion-slash-item)] px-2.5 py-2 text-left outline-none transition-colors whitespace-normal",
+                        "relative flex h-auto w-full items-center justify-start text-left outline-none transition-colors whitespace-normal",
+                        lite
+                          ? "min-h-[34px] rounded-lg px-2 py-1.5"
+                          : "min-h-[40px] rounded-[var(--radius-notion-slash-item)] px-2.5 py-2",
                         index === selectedIndex ? "bg-accent" : "bg-transparent",
                       )}
-                      onMouseEnter={() => setSelectedIndex(index)}
+                      onMouseEnter={() => {
+                        if (suppressItemHover) return;
+                        if (Date.now() < ignoreMouseEnterUntilRef.current) return;
+                        setSelectedIndex(index);
+                      }}
                       onClick={() => selectItem(index)}
                     >
-                      <div className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-notion-slash-icon)] bg-[var(--goose-block-subtle-bg)]">
+                      <div
+                        className={cn(
+                          "flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-notion-slash-icon)] bg-[var(--goose-block-subtle-bg)]",
+                          lite ? "mr-2 h-6 w-6" : "mr-2.5 h-7 w-7",
+                        )}
+                      >
                         {item.icon ? (
                           <span
                             className={cn(
@@ -175,7 +332,8 @@ const CustomSlashMenu = forwardRef<HTMLDivElement, CustomSlashMenuProps>(
                       <div className="min-w-0 flex-1">
                         <div
                           className={cn(
-                            "truncate text-[12px] font-medium",
+                            "truncate font-medium",
+                            lite ? "text-[11px]" : "text-[12px]",
                             item.disabled
                               ? "text-muted-foreground/55"
                               : index === selectedIndex
@@ -186,7 +344,12 @@ const CustomSlashMenu = forwardRef<HTMLDivElement, CustomSlashMenuProps>(
                           {item.title}
                         </div>
                         {item.description && (
-                          <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                          <div
+                            className={cn(
+                              "mt-0.5 truncate text-muted-foreground",
+                              lite ? "text-[9px]" : "text-[10px]",
+                            )}
+                          >
                             {item.description}
                           </div>
                         )}

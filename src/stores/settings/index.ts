@@ -26,6 +26,7 @@ import { createShortcutsSlice, type ShortcutsSlice, DEFAULT_APP_SHORTCUTS } from
 import { createSearchProvidersSlice, type SearchProvidersSlice } from './slices/searchProvidersSlice'
 import { createLocalFolderSlice, type LocalFolderSlice } from './slices/localFolderSlice'
 import { createWebdavSlice, type WebdavSlice } from './slices/webdavSlice'
+import { normalizeWatermarkConfig } from '@/lib/imageExport'
 
 export type SettingsState =
     AISlice &
@@ -267,6 +268,11 @@ export const useSettings = create<SettingsState>()(
                     }
                     if (JSON.stringify(state.desktop) !== JSON.stringify(mergedDesktop)) {
                         useSettings.setState({ desktop: mergedDesktop })
+                    }
+
+                    const mergedWatermark = normalizeWatermarkConfig(state.imageExportWatermark)
+                    if (JSON.stringify(state.imageExportWatermark) !== JSON.stringify(mergedWatermark)) {
+                        useSettings.setState({ imageExportWatermark: mergedWatermark })
                     }
                 }
 

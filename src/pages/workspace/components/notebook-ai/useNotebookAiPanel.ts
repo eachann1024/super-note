@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect } from "react";
 
 const STORAGE_KEY = "goose-note-ai-panel-open";
 
+/** 无记录或读失败时视为关闭（默认不打开 AI 面板）。 */
 function readStoredOpen(): boolean {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

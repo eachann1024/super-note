@@ -1,6 +1,6 @@
 import type { CardTheme } from "../themes";
 import type { WatermarkConfig } from "../watermark";
-import { DEFAULT_WATERMARK_CONFIG, getWatermarkHTML } from "../watermark";
+import { DEFAULT_WATERMARK_CONFIG, getWatermarkHTML, normalizeWatermarkConfig } from "../watermark";
 import { escapeHtml } from "./utils";
 
 function getGoogleFontsUrl(): string {
@@ -30,7 +30,8 @@ export function buildStyledHTML(params: {
   isSelection?: boolean;
   watermarkConfig?: WatermarkConfig;
 }): string {
-  const { title, blocksHtml, theme, watermarkConfig } = params;
+  const { title, blocksHtml, theme } = params;
+  const wm = normalizeWatermarkConfig(params.watermarkConfig);
   const t = theme;
 
   const decoStyle = t.showDecorations
@@ -337,13 +338,13 @@ ${decoStyle}
 <body>
 <div class="gooseshot-container">
   <div class="gooseshot-card">
-    ${(watermarkConfig?.showTitle ?? true) ? `<div class="gooseshot-header">
+    ${wm.showTitle ? `<div class="gooseshot-header">
       <div class="gooseshot-title">${escapeHtml(title || "无标题")}</div>
     </div>` : ""}
     <div class="gooseshot-content">
       ${blocksHtml}
     </div>
-    ${getWatermarkHTML(theme, watermarkConfig ?? DEFAULT_WATERMARK_CONFIG)}
+    ${getWatermarkHTML(theme, wm)}
   </div>
 </div>
 </body>
