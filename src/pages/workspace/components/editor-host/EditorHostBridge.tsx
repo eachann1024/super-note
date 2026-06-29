@@ -59,6 +59,7 @@ export function EditorHostBridge({
   const searchProviders = useSettings((s) => s.searchProviders);
   const utools = useSettings((s) => s.utools);
   const customActions = useSettings((s) => s.customActions);
+  const enterKeyBehavior = useSettings((s) => s.enterKeyBehavior);
 
   const settings = useMemo<EditorSettings>(
     () => ({
@@ -72,6 +73,7 @@ export function EditorHostBridge({
       searchProviders,
       utools,
       customActions,
+      enterKeyBehavior,
       redirectAction: (label, payload) => {
         UToolsAdapter.redirect(label as string | [string, string], payload);
       },
@@ -87,6 +89,7 @@ export function EditorHostBridge({
       searchProviders,
       utools,
       customActions,
+      enterKeyBehavior,
     ],
   );
 

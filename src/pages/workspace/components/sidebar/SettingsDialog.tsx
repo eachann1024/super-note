@@ -121,6 +121,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setSidebarClickBehavior,
     localFolderExternalEditor,
     setLocalFolderExternalEditor,
+    enterKeyBehavior,
+    setEnterKeyBehavior,
   } = useSettings(useShallow((s) => ({
     theme: s.theme,
     setTheme: s.setTheme,
@@ -169,6 +171,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setSidebarClickBehavior: s.setSidebarClickBehavior,
     localFolderExternalEditor: s.localFolderExternalEditor,
     setLocalFolderExternalEditor: s.setLocalFolderExternalEditor,
+    enterKeyBehavior: s.enterKeyBehavior,
+    setEnterKeyBehavior: s.setEnterKeyBehavior,
   })));
   const { notebooks } = useNotebooks(useShallow((s) => ({ notebooks: s.notebooks })));
   const { pages } = usePages(useShallow((s) => ({ pages: s.pages })));
@@ -524,6 +528,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 setNotebookDropdownHoverExpand={setNotebookDropdownHoverExpand}
                 sidebarClickBehavior={sidebarClickBehavior}
                 setSidebarClickBehavior={setSidebarClickBehavior}
+                enterKeyBehavior={enterKeyBehavior}
+                setEnterKeyBehavior={setEnterKeyBehavior}
                 customActions={customActions}
                 addCustomAction={addCustomAction}
                 updateCustomAction={updateCustomAction}

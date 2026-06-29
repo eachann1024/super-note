@@ -120,6 +120,17 @@ export function QuickNoteApp() {
     return () =>
       window.removeEventListener("goose-note:quicknote-enter", handler);
   }, []);
+  // 监听回车「保存并退出」快捷键事件
+  useEffect(() => {
+    const handleEnterSaveExit = () => {
+      // 这里的 handleSave 在 render 时可能指向旧函数，但 handleSave 本身只消费 refs / getState，
+      // 故闭包内直接调用总是能拿到最新状态。
+      handleSave();
+    };
+    window.addEventListener("goose-note:enter-save-exit", handleEnterSaveExit);
+    return () =>
+      window.removeEventListener("goose-note:enter-save-exit", handleEnterSaveExit);
+  }, []);
 
   // 强制置顶（无失焦自动隐藏）：小窗常驻最前层，置顶由主窗 preload 在创建时设定，
   // 失焦不再触发隐藏——点窗外不会收起，只能 Esc / 关闭按钮收起。

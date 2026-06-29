@@ -50,6 +50,7 @@ import { gooseCalloutKeyboardExtension } from "@/components/editor/extensions/ca
 import { gooseFirstTitleEnterExtension } from "@/components/editor/extensions/firstTitleEnterExtension";
 import { gooseCollapsedToggleEnterExtension } from "@/components/editor/extensions/collapsedToggleEnterExtension";
 import { gooseToggleHeadingAutoCollectExtension } from "@/components/editor/extensions/toggleHeadingAutoCollectExtension";
+import { gooseEnterKeyBehaviorExtension } from "@/components/editor/extensions/gooseEnterKeyBehaviorExtension";
 import { gooseCrossBlockDeleteExtension } from "@/components/editor/extensions/crossBlockDeleteExtension";
 import { gooseEmptyBlockBackspaceExtension } from "@/components/editor/extensions/emptyBlockBackspaceExtension";
 import { createGooseFirstTitleGuardExtension } from "@/components/editor/inputrules/firstTitleGuard";
@@ -99,6 +100,7 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
     customActions,
     tableEvenColumnWidth,
     ai: aiSettings,
+    enterKeyBehavior,
   } = useEditorSettings();
   const {
     page,
@@ -183,11 +185,18 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
   if (syncedContentSignatureRef.current === null) {
     syncedContentSignatureRef.current = getCachedContentSignature(initialContentRef.current);
   }
+  // 同步 enterKeyBehavior 到 window.gooseEnterKeyBehavior 以便 keyboard extension 可以检测到变化
+  useEffect(() => {
+    interface GooseWindow extends Window {
+      gooseEnterKeyBehavior?: "create-block" | "save-exit";
+    }
+    const gooseWindow = window as unknown as GooseWindow;
+    gooseWindow.gooseEnterKeyBehavior = enterKeyBehavior;
+  }, [enterKeyBehavior]);
   const editor = useCreateBlockNote(
     {
       initialContent: initialContentRef.current as any,
       schema: editorSchema,
-      // 禁用内置 quote 块自带的 extension(key: quote-block-shortcuts)。它含两条输入规则:
       // `> ` → 引用、`<引号> ` → 引用,以及 Mod-Alt-q。这里把 `>` 让给折叠功能
       // (行首 `> ` → 折叠标题/折叠列表,见 toggleHeadingInputRule),引用改用 `| `/`｜ `
       // (见 quoteInputRule)。斜杠菜单仍可插入引用,不受影响。
@@ -213,6 +222,7 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor({ edita
         gooseCrossBlockDeleteExtension,
         gooseEmptyBlockBackspaceExtension,
         createGooseSlashMenuReconcileExtension(isLocalFolderPageRef, editorInstanceRef),
+        gooseEnterKeyBehaviorExtension,
         gooseQuoteInputRuleExtension,
         gooseMarkdownInputRulesExtension,
         gooseFakeSelectionExtension,

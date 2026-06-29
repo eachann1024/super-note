@@ -30,6 +30,8 @@ interface SettingsGeneralProps {
   setNotebookDropdownHoverExpand: (enabled: boolean) => void;
   sidebarClickBehavior: "preview" | "replace-current";
   setSidebarClickBehavior: (behavior: "preview" | "replace-current") => void;
+  enterKeyBehavior?: "create-block" | "save-exit";
+  setEnterKeyBehavior?: (behavior: "create-block" | "save-exit") => void;
   customActions?: CustomAction[];
   addCustomAction?: (action: Omit<CustomAction, "id">) => void;
   updateCustomAction?: (id: string, updates: Partial<Omit<CustomAction, "id">>) => void;
@@ -59,6 +61,8 @@ export function SettingsGeneral({
   setNotebookDropdownHoverExpand,
   sidebarClickBehavior,
   setSidebarClickBehavior,
+  enterKeyBehavior = "create-block",
+  setEnterKeyBehavior = () => {},
   customActions = [],
   addCustomAction = () => {},
   updateCustomAction = () => {},
@@ -130,6 +134,30 @@ export function SettingsGeneral({
             }
             className={SETTINGS_SWITCH_CLASS}
           />
+        </div>
+        <div className={`flex items-center justify-between gap-4 p-4 mt-2 ${SETTINGS_OPTION_ROW_CLASS}`}>
+          <div>
+            <div className="flex items-center gap-3">
+              <LucideIcons.CornerDownLeft className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+              <Label htmlFor="enter-key-behavior" className="cursor-pointer">
+                默认按回车键行为
+              </Label>
+            </div>
+            <p className="mt-1 pl-7 text-xs text-muted-foreground">
+              创建新行：回车新增空白块；保存并退出：小窗编辑或速记回车将直接保存并退出编辑状态（收起键盘）。
+            </p>
+          </div>
+          <div className="flex items-center gap-2" style={{ contentVisibility: "auto" } as any}>
+            <select
+              id="enter-key-behavior"
+              value={enterKeyBehavior}
+              onChange={(e) => setEnterKeyBehavior(e.target.value as any)}
+              className="h-8 rounded-[8px] border border-input bg-[hsl(var(--background))] px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="create-block">创建新行</option>
+              <option value="save-exit">保存并退出</option>
+            </select>
+          </div>
         </div>
       </SettingsSectionCard>
 

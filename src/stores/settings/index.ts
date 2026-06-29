@@ -285,6 +285,15 @@ export const useSettings = create<SettingsState>()(
                         useSettings.setState({ localFolderExternalEditor: normalizedLocalFolderExternalEditor })
                     }
                 }
+                if (state) {
+                    const normalizedEnterKeyBehavior =
+                        state.enterKeyBehavior === 'create-block' || state.enterKeyBehavior === 'save-exit'
+                            ? state.enterKeyBehavior
+                            : 'create-block'
+                    if (state.enterKeyBehavior !== normalizedEnterKeyBehavior) {
+                        useSettings.setState({ enterKeyBehavior: normalizedEnterKeyBehavior })
+                    }
+                }
 
                 // 标记 hydration 完成
                 useSettings.setState({ _hasHydrated: true })
