@@ -1,4 +1,40 @@
 // Polyfill for older Chromium (uTools built-in)
+if (typeof globalThis.structuredClone !== "function") {
+  Object.defineProperty(globalThis, "structuredClone", {
+    value: function structuredClonePolyfill<T>(value: T): T {
+      return JSON.parse(JSON.stringify(value)) as T;
+    },
+    writable: true,
+    configurable: true,
+  });
+}
+
+if (
+  typeof globalThis.crypto !== "undefined" &&
+  typeof globalThis.crypto.randomUUID !== "function"
+) {
+  Object.defineProperty(globalThis.crypto, "randomUUID", {
+    value: function randomUUIDPolyfill() {
+      const bytes = new Uint8Array(16);
+      if (typeof globalThis.crypto.getRandomValues === "function") {
+        globalThis.crypto.getRandomValues(bytes);
+      } else {
+        for (let index = 0; index < bytes.length; index += 1) {
+          bytes[index] = Math.floor(Math.random() * 256);
+        }
+      }
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = Array.from(bytes, (byte) =>
+        byte.toString(16).padStart(2, "0"),
+      );
+      return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
+    },
+    writable: true,
+    configurable: true,
+  });
+}
+
 if (!(Array.prototype as any).toReversed) {
   Object.defineProperty(Array.prototype, "toReversed", {
     value: function (this: unknown[]) {
@@ -25,26 +61,39 @@ if (!(Array.prototype as any).toReversed) {
       });
     };
 
-    define("filter", function (this: Iterator<unknown>, fn: (v: unknown, i: number) => boolean) {
-      // generator 内捕获 this（Iterator 实例），generator 函数不可用箭头函数替代
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
-      const it = this;
-      let i = 0;
-      return (function* () {
-        for (let r = it.next(); !r.done; r = it.next()) {
-          if (fn(r.value, i++)) yield r.value;
-        }
-      })();
-    });
-    define("map", function (this: Iterator<unknown>, fn: (v: unknown, i: number) => unknown) {
-      // generator 内捕获 this（Iterator 实例），generator 函数不可用箭头函数替代
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
-      const it = this;
-      let i = 0;
-      return (function* () {
-        for (let r = it.next(); !r.done; r = it.next()) yield fn(r.value, i++);
-      })();
-    });
+    define(
+      "filter",
+      function (
+        this: Iterator<unknown>,
+        fn: (v: unknown, i: number) => boolean,
+      ) {
+        // generator 内捕获 this（Iterator 实例），generator 函数不可用箭头函数替代
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        const it = this;
+        let i = 0;
+        return (function* () {
+          for (let r = it.next(); !r.done; r = it.next()) {
+            if (fn(r.value, i++)) yield r.value;
+          }
+        })();
+      },
+    );
+    define(
+      "map",
+      function (
+        this: Iterator<unknown>,
+        fn: (v: unknown, i: number) => unknown,
+      ) {
+        // generator 内捕获 this（Iterator 实例），generator 函数不可用箭头函数替代
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        const it = this;
+        let i = 0;
+        return (function* () {
+          for (let r = it.next(); !r.done; r = it.next())
+            yield fn(r.value, i++);
+        })();
+      },
+    );
     define("take", function (this: Iterator<unknown>, limit: number) {
       // generator 内捕获 this（Iterator 实例），generator 函数不可用箭头函数替代
       // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -70,58 +119,98 @@ if (!(Array.prototype as any).toReversed) {
         }
       })();
     });
-    define("flatMap", function (this: Iterator<unknown>, fn: (v: unknown, i: number) => unknown) {
-      // generator 内捕获 this（Iterator 实例），generator 函数不可用箭头函数替代
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
-      const it = this;
-      let i = 0;
-      return (function* () {
-        for (let r = it.next(); !r.done; r = it.next()) {
-          const mapped = fn(r.value, i++) as any;
-          if (mapped && typeof mapped[Symbol.iterator] === "function") {
-            yield* mapped;
-          } else {
-            yield mapped;
+    define(
+      "flatMap",
+      function (
+        this: Iterator<unknown>,
+        fn: (v: unknown, i: number) => unknown,
+      ) {
+        // generator 内捕获 this（Iterator 实例），generator 函数不可用箭头函数替代
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        const it = this;
+        let i = 0;
+        return (function* () {
+          for (let r = it.next(); !r.done; r = it.next()) {
+            const mapped = fn(r.value, i++) as any;
+            if (mapped && typeof mapped[Symbol.iterator] === "function") {
+              yield* mapped;
+            } else {
+              yield mapped;
+            }
           }
-        }
-      })();
-    });
+        })();
+      },
+    );
     define("toArray", function (this: Iterator<unknown>) {
       const out: unknown[] = [];
       for (let r = this.next(); !r.done; r = this.next()) out.push(r.value);
       return out;
     });
-    define("forEach", function (this: Iterator<unknown>, fn: (v: unknown, i: number) => void) {
-      let i = 0;
-      for (let r = this.next(); !r.done; r = this.next()) fn(r.value, i++);
-    });
-    define("reduce", function (this: Iterator<unknown>, fn: (acc: unknown, v: unknown, i: number) => unknown, init?: unknown) {
-      let acc = init;
-      let i = 0;
-      let r = this.next();
-      if (arguments.length < 2) {
-        if (r.done) throw new TypeError("Reduce of empty iterator with no initial value");
-        acc = r.value;
-        r = this.next();
-      }
-      for (; !r.done; r = this.next()) acc = fn(acc, r.value, i++);
-      return acc;
-    });
-    define("some", function (this: Iterator<unknown>, fn: (v: unknown, i: number) => boolean) {
-      let i = 0;
-      for (let r = this.next(); !r.done; r = this.next()) if (fn(r.value, i++)) return true;
-      return false;
-    });
-    define("every", function (this: Iterator<unknown>, fn: (v: unknown, i: number) => boolean) {
-      let i = 0;
-      for (let r = this.next(); !r.done; r = this.next()) if (!fn(r.value, i++)) return false;
-      return true;
-    });
-    define("find", function (this: Iterator<unknown>, fn: (v: unknown, i: number) => boolean) {
-      let i = 0;
-      for (let r = this.next(); !r.done; r = this.next()) if (fn(r.value, i++)) return r.value;
-      return undefined;
-    });
+    define(
+      "forEach",
+      function (this: Iterator<unknown>, fn: (v: unknown, i: number) => void) {
+        let i = 0;
+        for (let r = this.next(); !r.done; r = this.next()) fn(r.value, i++);
+      },
+    );
+    define(
+      "reduce",
+      function (
+        this: Iterator<unknown>,
+        fn: (acc: unknown, v: unknown, i: number) => unknown,
+        init?: unknown,
+      ) {
+        let acc = init;
+        let i = 0;
+        let r = this.next();
+        if (arguments.length < 2) {
+          if (r.done)
+            throw new TypeError(
+              "Reduce of empty iterator with no initial value",
+            );
+          acc = r.value;
+          r = this.next();
+        }
+        for (; !r.done; r = this.next()) acc = fn(acc, r.value, i++);
+        return acc;
+      },
+    );
+    define(
+      "some",
+      function (
+        this: Iterator<unknown>,
+        fn: (v: unknown, i: number) => boolean,
+      ) {
+        let i = 0;
+        for (let r = this.next(); !r.done; r = this.next())
+          if (fn(r.value, i++)) return true;
+        return false;
+      },
+    );
+    define(
+      "every",
+      function (
+        this: Iterator<unknown>,
+        fn: (v: unknown, i: number) => boolean,
+      ) {
+        let i = 0;
+        for (let r = this.next(); !r.done; r = this.next())
+          if (!fn(r.value, i++)) return false;
+        return true;
+      },
+    );
+    define(
+      "find",
+      function (
+        this: Iterator<unknown>,
+        fn: (v: unknown, i: number) => boolean,
+      ) {
+        let i = 0;
+        for (let r = this.next(); !r.done; r = this.next())
+          if (fn(r.value, i++)) return r.value;
+        return undefined;
+      },
+    );
   }
 }
 
@@ -188,7 +277,9 @@ const hasVisiblePagesInNotebook = (
 
 const setupSaveGuards = () => {
   if (typeof window === "undefined" || typeof document === "undefined") return;
-  const hostWindow = window as Window & { __gooseNoteSaveGuardInstalled?: boolean };
+  const hostWindow = window as Window & {
+    __gooseNoteSaveGuardInstalled?: boolean;
+  };
   if (hostWindow.__gooseNoteSaveGuardInstalled) return;
   hostWindow.__gooseNoteSaveGuardInstalled = true;
 
@@ -339,7 +430,10 @@ export const bootstrap = async (
       useNotebooks.setState({
         notebooks: recoveredNotebooks.notebooks,
         ...(shouldFocusRecoveredNotebook
-          ? { activeNotebookId: recoveredNotebooks.recoveredNotebookIds[0] ?? null }
+          ? {
+              activeNotebookId:
+                recoveredNotebooks.recoveredNotebookIds[0] ?? null,
+            }
           : {}),
       });
       console.warn(
@@ -387,8 +481,11 @@ export const bootstrap = async (
     for (const blocksJson of items) {
       try {
         const blocks = JSON.parse(blocksJson);
-        const nbId = useNotebooks.getState().activeNotebookId ?? DEFAULT_NOTEBOOK;
-        usePages.getState().createPageRecord({ workspaceId: nbId, content: blocks });
+        const nbId =
+          useNotebooks.getState().activeNotebookId ?? DEFAULT_NOTEBOOK;
+        usePages
+          .getState()
+          .createPageRecord({ workspaceId: nbId, content: blocks });
       } catch (e) {
         console.error("[quicknote_save] 落库失败", e);
       }
@@ -401,7 +498,9 @@ export const bootstrap = async (
         if (ut && typeof ut.outPlugin === "function") {
           ut.outPlugin(false);
         }
-      } catch { /* noop */ }
+      } catch {
+        /* noop */
+      }
     }
   };
   // 冷启动消费（React 刚 mount，已有积压）

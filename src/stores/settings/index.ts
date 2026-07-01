@@ -200,7 +200,7 @@ export const useSettings = create<SettingsState>()(
 
                 if (state) {
                     if (typeof state.webdavUrl !== 'string') {
-                        useSettings.setState({ webdavUrl: 'https://dav.jianguoyun.com/dav/' })
+                        useSettings.setState({ webdavUrl: 'https://example.com/dav/' })
                     }
                     if (typeof state.webdavUsername !== 'string') {
                         useSettings.setState({ webdavUsername: '' })

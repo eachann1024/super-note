@@ -1004,30 +1004,18 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     );
   };
 
+  const clearSubInput = () => {
+    if (typeof utools.removeSubInput === "function") {
+      utools.removeSubInput();
+    }
+  };
+
   // 主插件指令处理。速记小窗已拆为独立插件「鹅的小窗」（quicknote-plugin.json），
   // 主插件不再开内置浮窗，故此处不再有 quicknote_new/quicknote_last 分支。
   utools.onPluginEnter(({ code, type, payload, optional }) => {
-    // 确保每次进入插件都重新设置 subInput
-    if (typeof utools.setSubInput === "function") {
-      const UTOOLS_INPUT_EVENT = "goose-note:utools-search";
-      utools.setSubInput(
-        ({ text }) => {
-          // 只有当不是因为应用同步导致的变化时才派发事件
-          if (window.__gooseNoteSuppressNextChange && text === window.__gooseNoteLastAppValue) {
-            window.__gooseNoteSuppressNextChange = false;
-            return;
-          }
-
-          window.dispatchEvent(
-            new CustomEvent(UTOOLS_INPUT_EVENT, {
-              detail: { text },
-            }),
-          );
-        },
-        "搜索笔记",
-        true,
-      );
-    }
+    // 普通进入插件时不要挂 uTools 宿主输入框。应用内已有 CommandPalette；
+    // 宿主 subInput 会抢走编辑器焦点，导致正文输入跑到窗口左侧。
+    clearSubInput();
 
     window.dispatchEvent(
       new CustomEvent("goose-note:plugin-enter", {
@@ -1087,16 +1075,9 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     }
   });
 
-  // 移出原有的全局 setSubInput，并优化同步逻辑
-  const APP_SYNC_EVENT = "goose-note:utools-search-sync";
-  window.__gooseNoteSuppressNextChange = false;
-  window.__gooseNoteLastAppValue = "";
-
   if (typeof utools.onPluginOut === "function") {
     utools.onPluginOut((isKill) => {
-      if (typeof utools.removeSubInput === "function") {
-        utools.removeSubInput();
-      }
+      clearSubInput();
       window.dispatchEvent(
         new CustomEvent("goose-note:plugin-out", {
           detail: {
@@ -1107,16 +1088,5 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       );
     });
   }
-
-  window.addEventListener(APP_SYNC_EVENT, (event) => {
-    const detail = event.detail || {};
-    const text = typeof detail.text === "string" ? detail.text : "";
-    if (text === window.__gooseNoteLastAppValue) return;
-    window.__gooseNoteLastAppValue = text;
-    if (typeof utools.setSubInputValue === "function") {
-      window.__gooseNoteSuppressNextChange = true;
-      utools.setSubInputValue(text);
-    }
-  });
 
 }

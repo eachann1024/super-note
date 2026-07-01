@@ -103,7 +103,7 @@ export function isBackupFileName(fileName: string): boolean {
 function formatWebdavError(error: any): string {
   const msg = String(error.message || error);
   if (msg.includes("AncestorsNotFound") || msg.includes("The ancestors of this location does not found")) {
-    return "检测到祖先目录不存在。如果您使用坚果云 WebDAV，坚果云限制了不能在根目录下直接创建文件夹，请确认您的“远端目录”是否填写正确。例如应填写为已存在的同步文件夹路径，如“我的坚果云/goose-notes”；或者先在坚果云网页端创建一个名为“goose-notes”的同步文件夹，然后在这里将远端目录填为“goose-notes”。";
+    return "检测到上级目录不存在，请确认“远端目录”填写的是服务端已经存在的路径。部分 WebDAV 服务不支持直接在根目录创建文件夹，例如 Nextcloud、ownCloud、坚果云或部分 NAS 场景通常需要先在服务端创建同步目录，再在这里填写对应路径（如“backups/goose-notes”）。";
   }
   return msg;
 }

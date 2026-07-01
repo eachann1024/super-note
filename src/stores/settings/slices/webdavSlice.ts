@@ -19,7 +19,7 @@ export interface WebdavSliceActions {
 export type WebdavSlice = WebdavSliceState & WebdavSliceActions
 
 export const WEBDAV_INITIAL_STATE: WebdavSliceState = {
-  webdavUrl: "https://dav.jianguoyun.com/dav/",
+  webdavUrl: "https://example.com/dav/",
   webdavUsername: "",
   webdavPassword: "",
   webdavRemoteDir: "goose-notes",

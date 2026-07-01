@@ -92,6 +92,7 @@ export function Sidebar({
 
   useSidebarEffects({
     activePageId,
+    activeNotebookId,
     currentView,
     onOpenSettings: () => setShowSettings(true),
   });

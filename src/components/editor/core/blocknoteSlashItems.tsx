@@ -123,7 +123,6 @@ export function getBlockNoteSlashMenuItems(
       description: "接着写点什么...",
       icon: <LucideIcons.Sparkles size={18} />,
       aliases: ["ai", "generate", "shengcheng", "xiezuo", "sparkle"],
-      badge: "Space",
       onItemClick: () => {
         // 删除触发字符 / 或 、
         const pos = editor.getTextCursorPosition();
@@ -201,7 +200,6 @@ export function getBlockNoteSlashMenuItems(
       description: "可展开/收起下方内容的一级标题",
       icon: <LucideIcons.ChevronRightSquare size={18} />,
       aliases: ["toggleheading", "toggleh1", "toggle", "collapseheading", "fold", "zhediebiaoti", "zhedie", "shouqibiaoti"],
-      badge: "> #",
       onItemClick: () =>
         insertOrUpdate({
           type: "heading",
@@ -213,7 +211,6 @@ export function getBlockNoteSlashMenuItems(
       description: "可展开/收起下方内容的二级标题",
       icon: <LucideIcons.ChevronRightSquare size={18} />,
       aliases: ["toggleheading2", "toggleh2", "toggle", "fold", "zhedie", "zhedieerji"],
-      badge: "> ##",
       onItemClick: () =>
         insertOrUpdate({
           type: "heading",
@@ -225,7 +222,6 @@ export function getBlockNoteSlashMenuItems(
       description: "可展开/收起下方内容的三级标题",
       icon: <LucideIcons.ChevronRightSquare size={18} />,
       aliases: ["toggleheading3", "toggleh3", "toggle", "fold", "zhedie", "zhediesanji"],
-      badge: "> ###",
       onItemClick: () =>
         insertOrUpdate({
           type: "heading",
@@ -278,7 +274,6 @@ export function getBlockNoteSlashMenuItems(
       description: "插入带图标的重点标注块",
       icon: <LucideIcons.Info size={18} />,
       aliases: ["callout", "annotation", "info", "biaozhu", "tishi"],
-      badge: "co",
       onItemClick: () => insertOrUpdate({ type: "callout" }),
     },
     {
@@ -295,7 +290,6 @@ export function getBlockNoteSlashMenuItems(
       description: "插入一个简单的表格",
       icon: <LucideIcons.Table size={18} />,
       aliases: ["table", "biaoge"],
-      badge: "tb",
       onItemClick: () => {
         insertOrUpdate({
           type: "table",
@@ -320,7 +314,6 @@ export function getBlockNoteSlashMenuItems(
       description: "插入数学公式块 (KaTeX)",
       icon: <LucideIcons.Sigma size={18} />,
       aliases: ["math", "formula", "gongshi", "katex"],
-      badge: "$$",
       onItemClick: () =>
         insertOrUpdate({ type: "codeBlock", props: { language: "math" } }),
     },
@@ -329,7 +322,6 @@ export function getBlockNoteSlashMenuItems(
       description: "插入流程图、时序图等 (Mermaid)",
       icon: <LucideIcons.GitGraph size={18} />,
       aliases: ["mermaid", "chart", "diagram", "tubiao"],
-      badge: "mr",
       onItemClick: () =>
         insertOrUpdate({ type: "codeBlock", props: { language: "mermaid" } }),
     },
@@ -338,7 +330,6 @@ export function getBlockNoteSlashMenuItems(
       description: "插入图片选择器模块",
       icon: <LucideIcons.Image size={18} />,
       aliases: ["image", "photo", "tupian", "img"],
-      badge: "img",
       onItemClick: () => {
         const inserted = insertOrUpdate({ type: "image" });
         editor.getExtension(FilePanelExtension)?.showMenu(inserted.id);
@@ -349,7 +340,6 @@ export function getBlockNoteSlashMenuItems(
       description: "上传附件并直接调用系统默认应用打开",
       icon: <LucideIcons.FileUp size={18} />,
       aliases: ["file", "attachment", "pdf", "wenjian", "fujian"],
-      badge: "file",
       onItemClick: () => {
         const inserted = insertOrUpdate({ type: "file" });
         editor.getExtension(FilePanelExtension)?.showMenu(inserted.id);

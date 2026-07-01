@@ -256,25 +256,25 @@ const CustomSlashMenu = forwardRef<HTMLDivElement, CustomSlashMenuProps>(
 
     return (
       <div
-        className="workspace-shell flex max-h-[inherit] min-h-0 flex-col overflow-hidden bg-transparent"
+        className="inline-flex max-h-[inherit] min-h-0 flex-col overflow-visible bg-transparent"
         data-notion-slash-root="true"
         {...(lite ? { "data-goose-slash-lite": "true" } : {})}
       >
         <div
           data-notion-slash-surface="true"
           className={cn(
-            "z-50 flex min-h-0 max-h-full min-w-0 flex-col border border-border/75 bg-popover text-popover-foreground shadow-[0_14px_34px_rgba(15,23,42,0.16),0_2px_8px_rgba(15,23,42,0.08)]",
+            "z-50 flex h-auto min-h-0 min-w-0 flex-col overflow-hidden border border-border/75 bg-popover text-popover-foreground shadow-[0_14px_34px_rgba(15,23,42,0.16),0_2px_8px_rgba(15,23,42,0.08)]",
             lite
-              ? "w-[248px] overflow-hidden rounded-xl p-1"
-              : "w-[280px] rounded-[var(--radius-notion-slash)] p-1.5",
+              ? "max-h-[inherit] w-[248px] rounded-xl p-1"
+              : "max-h-[20rem] w-[280px] rounded-[var(--radius-notion-slash)] p-1.5",
           )}
         >
           <div
             ref={containerRef}
             data-notion-slash-scroll={lite ? "" : undefined}
             className={cn(
-              "min-h-0 flex-1 overflow-y-auto overscroll-contain",
-              lite ? "max-h-full pb-2" : "max-h-[min(20rem,100%)] pb-1",
+              "min-h-0 overflow-y-auto overscroll-contain",
+              lite ? "max-h-[inherit] pb-2" : "max-h-[20rem] pb-1",
               suppressItemHover && "pointer-events-none",
             )}
           >

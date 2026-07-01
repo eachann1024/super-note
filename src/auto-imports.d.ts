@@ -171,6 +171,7 @@ declare global {
   const createAiChatOnlyTarget: typeof import('./lib/ai-write/index').createAiChatOnlyTarget
   const createContext: typeof import('react').createContext
   const createDebounce: typeof import('./components/editor/utils/debounce').createDebounce
+  const createEditorSafeContent: typeof import('./components/editor/utils/blocknote-content/index').createEditorSafeContent
   const createEmptyBlockNoteContent: typeof import('./components/editor/utils/blocknote-content/index').createEmptyBlockNoteContent
   const createEmptyLocalPageContent: typeof import('./components/editor/utils/blocknote-content/index').createEmptyLocalPageContent
   const createRef: typeof import('react').createRef

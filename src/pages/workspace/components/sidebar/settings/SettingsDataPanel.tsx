@@ -517,10 +517,10 @@ export function SettingsDataPanel({
                   value={tempUrl}
                   disabled={busy}
                   onChange={(e) => setTempUrl(e.target.value)}
-                  placeholder="例如 https://dav.jianguoyun.com/dav/"
+                  placeholder="例如 https://example.com/dav/"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  坚果云默认地址：https://dav.jianguoyun.com/dav/
+                  示例地址：https://example.com/dav/
                 </p>
               </div>
 

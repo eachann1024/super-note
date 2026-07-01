@@ -3,7 +3,7 @@
 
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { ClientSideTransport } from "@blocknote/xl-ai";
+import { aiDocumentFormats, ClientSideTransport } from "@blocknote/xl-ai";
 import type { ChatTransport, UIMessage } from "ai";
 import type { AISettingsLike } from "@/lib/ai-provider/types";
 
@@ -75,7 +75,10 @@ export function createGooseAITransport(
     const modelId = options.getModelId();
     const fetchImpl = options.getCustomFetch?.() ?? globalThis.fetch;
     const model = buildModel(settings, modelId, fetchImpl);
-    const inner = new ClientSideTransport({ model });
+    const inner = new ClientSideTransport({
+      model,
+      systemPrompt: aiDocumentFormats.html.systemPrompt,
+    });
     return inner.sendMessages(params);
   };
 

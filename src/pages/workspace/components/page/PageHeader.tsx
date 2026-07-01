@@ -38,6 +38,7 @@ interface SortableTabItemProps {
   onCloseLeft: () => void;
   onCloseRight: () => void;
   onTogglePin: () => void;
+  onPromotePreview: () => void;
   onLocateInTree?: () => void;
 }
 
@@ -56,6 +57,7 @@ function SortableTabItem({
   onCloseLeft,
   onCloseRight,
   onTogglePin,
+  onPromotePreview,
   onLocateInTree,
 }: SortableTabItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -78,6 +80,12 @@ function SortableTabItem({
           data-tab-preview={tab.preview || undefined}
           data-tab-pinned={tab.pinned || undefined}
           onClick={onActivate}
+          onDoubleClick={(event) => {
+            if (!tab.preview) return;
+            event.preventDefault();
+            event.stopPropagation();
+            onPromotePreview();
+          }}
           onAuxClick={(e) => {
             if (e.button === 1) {
               e.preventDefault();
@@ -232,6 +240,7 @@ export function PageHeader({
     closeTabsToRight,
     reorderTabs,
     togglePinTab,
+    promotePreviewTab,
     syncNotebookForPage,
   } = useTabs();
   const setExpandPageId = usePages((s) => s.setExpandPageId);
@@ -419,6 +428,7 @@ export function PageHeader({
                     onCloseLeft={() => closeTabsToLeft(tab.id)}
                     onCloseRight={() => closeTabsToRight(tab.id)}
                     onTogglePin={() => togglePinTab(tab.id)}
+                    onPromotePreview={() => promotePreviewTab(tab.id)}
                     onLocateInTree={() => locateInTree(tab.pageId)}
                   />
                 );

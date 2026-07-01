@@ -110,6 +110,32 @@ function createRegexDecorations(
   return decorations;
 }
 
+function createRegexCaptureDecorations(
+  content: string,
+  pos: number,
+  patterns: Array<{ regex: RegExp; captureGroup: number; className: string }>,
+) {
+  const decorations: Decoration[] = [];
+
+  patterns.forEach(({ regex, captureGroup, className }) => {
+    for (const match of content.matchAll(regex)) {
+      const text = match[captureGroup];
+      if (match.index === undefined || !text) continue;
+      const offset = match[0].indexOf(text);
+      if (offset < 0) continue;
+      decorations.push(
+        Decoration.inline(
+          pos + 1 + match.index + offset,
+          pos + 1 + match.index + offset + text.length,
+          { class: className },
+        ),
+      );
+    }
+  });
+
+  return decorations;
+}
+
 const mermaidParser: Parser = ({ content, pos }) =>
   createRegexDecorations(content, pos, [
     {
@@ -123,6 +149,32 @@ const mermaidParser: Parser = ({ content, pos }) =>
     {
       regex: /(\[[^\]\n]+\]|\{[^}\n]+\}|\([^)\n]+\))/g,
       className: "hljs-string",
+    },
+  ]);
+
+const SHELL_HIGHLIGHT_LANGUAGES = new Set([
+  "bash",
+  "shell",
+  "sh",
+  "zsh",
+]);
+
+const shellCommandParser: Parser = ({ content, pos }) =>
+  createRegexCaptureDecorations(content, pos, [
+    {
+      regex: /(^|[;&|]\s*)([A-Za-z_][\w.-]*)(?=\s|$)/gm,
+      captureGroup: 2,
+      className: "hljs-title",
+    },
+    {
+      regex: /(^|\s)(-{1,2}[\w-]+)(?=\s|=|$)/gm,
+      captureGroup: 2,
+      className: "hljs-params",
+    },
+    {
+      regex: /(^|\s)([A-Za-z_][\w]*=)(?=\S)/gm,
+      captureGroup: 2,
+      className: "hljs-variable",
     },
   ]);
 
@@ -155,10 +207,20 @@ const codeBlockHighlightParser: Parser = (options) => {
         ? language
         : undefined;
 
-    return lowlightParser({
+    const decorations = lowlightParser({
       ...options,
       language: useLanguage,
     }) as any;
+
+    if (SHELL_HIGHLIGHT_LANGUAGES.has(language)) {
+      const shellDecorations = shellCommandParser(options);
+      if (Array.isArray(shellDecorations) && shellDecorations.length > 0) {
+        const baseDecorations = Array.isArray(decorations) ? decorations : [];
+        return [...baseDecorations, ...shellDecorations];
+      }
+    }
+
+    return decorations;
   } catch {
     return lowlightParser({ ...options, language: undefined }) as any;
   }

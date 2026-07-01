@@ -26,6 +26,8 @@ import {
 } from "@/lib/page-delete-actions";
 import { NotebookAiPanel } from "./components/notebook-ai/NotebookAiPanel";
 import { useNotebookAiPanel } from "./components/notebook-ai/useNotebookAiPanel";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { extractPlainText } from "@/components/editor/utils/blocknote-content";
 
 interface WorkspaceLayoutProps {
   isDragging: boolean;
@@ -48,15 +50,31 @@ export function WorkspaceLayout({
   editorRef,
   scrollContainerRef,
 }: WorkspaceLayoutProps) {
-  const { activePageId, updatePage, getPage } = usePages(useShallow((s) => ({ activePageId: s.activePageId, updatePage: s.updatePage, getPage: s.getPage })));
-  const { openTabs, activeTabId, openWelcomeTab } = useTabs(useShallow((s) => ({ openTabs: s.openTabs, activeTabId: s.activeTabId, openWelcomeTab: s.openWelcomeTab })));
+  const { activePageId, updatePage, getPage } = usePages(
+    useShallow((s) => ({
+      activePageId: s.activePageId,
+      updatePage: s.updatePage,
+      getPage: s.getPage,
+    })),
+  );
+  const { openTabs, activeTabId, openWelcomeTab } = useTabs(
+    useShallow((s) => ({
+      openTabs: s.openTabs,
+      activeTabId: s.activeTabId,
+      openWelcomeTab: s.openWelcomeTab,
+    })),
+  );
   const activeTab = openTabs.find((t) => t.id === activeTabId);
   const isWelcomeTab = activeTab?.type === "welcome";
   const openWelcomeTabHandler = () => {
     openWelcomeTab();
   };
   const aiEnabled = useSettings((s) => s.ai.enabled);
-  const { isOpen: aiPanelOpen, toggle: toggleAiPanel, close: closeAiPanel } = useNotebookAiPanel();
+  const {
+    isOpen: aiPanelOpen,
+    toggle: toggleAiPanel,
+    close: closeAiPanel,
+  } = useNotebookAiPanel();
   const searchHighlightNonce = usePages((s) => s.searchHighlightNonce);
   const searchHighlightQuery = usePages((s) => s.searchHighlightQuery);
   const searchHighlightPageId = usePages((s) => s.searchHighlightPageId);
@@ -66,7 +84,12 @@ export function WorkspaceLayout({
   const setHandledSearchHighlightNonce = usePages(
     (s) => s.setHandledSearchHighlightNonce,
   );
-  const { activeNotebookId, notebooks } = useNotebooks(useShallow((s) => ({ activeNotebookId: s.activeNotebookId, notebooks: s.notebooks })));
+  const { activeNotebookId, notebooks } = useNotebooks(
+    useShallow((s) => ({
+      activeNotebookId: s.activeNotebookId,
+      notebooks: s.notebooks,
+    })),
+  );
   const globalEditorFullWidth = useSettings((s) => s.globalEditorFullWidth);
   const historyActivePageId = useHistoryView((s) => s.active);
   const inHistoryMode =
@@ -114,7 +137,8 @@ export function WorkspaceLayout({
     if (!searchHighlightQuery) return;
     // 信号指向的页面还没成为当前活动页 → 等切页完成后本 effect 会因 activePageId
     // 变化再次运行，那时再继续。不在这里标记 handled，留待真正定位成功。
-    if (!searchHighlightPageId || searchHighlightPageId !== activePageId) return;
+    if (!searchHighlightPageId || searchHighlightPageId !== activePageId)
+      return;
     if (inHistoryMode || !page) return;
 
     const nonceToHandle = searchHighlightNonce;
@@ -199,7 +223,6 @@ export function WorkspaceLayout({
             scrollContainerRef={scrollContainerRef}
           />
 
-
           <main className="workspace-main-sheet relative flex-1 flex flex-col h-full overflow-hidden">
             {isWelcomeTab ? (
               <>
@@ -253,110 +276,136 @@ export function WorkspaceLayout({
                   page={page}
                   isEditorFullWidth={isEditorFullWidth}
                 >
-                <div className="workspace-editor-surface relative ml-0 mt-0 flex-1 min-h-0 overflow-hidden flex flex-row">
-                  <div
-                    ref={scrollContainerRef}
-                    className={cn(
-                      "h-full flex-1 min-w-0 overflow-y-auto page-scroll-container bg-[hsl(var(--goose-editor-bg))]",
-                    )}
-                  >
-                    {(() => {
-                      const isNewPage =
-                        page.createdAt === page.updatedAt &&
-                        (!page.content?.content?.[1]?.content ||
-                          page.content.content[1].content.length === 0);
+                  <div className="workspace-editor-surface relative ml-0 mt-0 flex-1 min-h-0 overflow-hidden flex flex-row">
+                    <div
+                      ref={scrollContainerRef}
+                      className={cn(
+                        "h-full flex-1 min-w-0 overflow-y-auto page-scroll-container bg-[hsl(var(--goose-editor-bg))]",
+                      )}
+                    >
+                      {(() => {
+                        const contentBlocks = Array.isArray(page.content)
+                          ? page.content
+                          : Array.isArray(page.content?.content)
+                            ? page.content.content
+                            : [];
+                        const hasBodyContent = contentBlocks
+                          .slice(1)
+                          .some(
+                            (block: unknown) =>
+                              extractPlainText([block] as any).trim().length >
+                              0,
+                          );
+                        const isNewPage =
+                          page.createdAt === page.updatedAt && !hasBodyContent;
 
-                      return (
-                        <div
-                          className={cn(
-                            "flex min-h-full flex-col",
-                            isEditorFullWidth ? "px-14" : "px-8",
-                            page.icon ? "pt-4" : "pt-0",
-                          )}
-                        >
+                        return (
                           <div
                             className={cn(
-                              page.icon ? "-mb-1 mt-2" : "mt-1",
-                              isEditorFullWidth
-                                ? "max-w-full"
-                                : "w-full max-w-[720px] mx-auto",
+                              "flex min-h-full flex-col",
+                              isEditorFullWidth ? "px-14" : "px-8",
+                              page.icon ? "pt-4" : "pt-0",
                             )}
                           >
-                            {!isLocalFolderPage && (
-                              <div
-                                className={cn(
-                                  "group relative",
-                                  !page.icon && "min-h-[20px] mb-2",
-                                )}
-                              >
-                                <IconSelector
-                                  value={page.icon}
-                                  onChange={(icon) =>
-                                    !page.trashedAt &&
-                                    !page.isLocked &&
-                                    updatePage(activePageId, { icon })
-                                  }
+                            <div
+                              className={cn(
+                                page.icon ? "-mb-1 mt-2" : "mt-1",
+                                isEditorFullWidth
+                                  ? "max-w-full"
+                                  : "w-full max-w-[720px] mx-auto",
+                              )}
+                            >
+                              {!isLocalFolderPage && (
+                                <div
+                                  className={cn(
+                                    "group relative",
+                                    !page.icon && "min-h-[20px] mb-2",
+                                  )}
                                 >
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                      "inline-flex h-auto w-auto p-0 items-center justify-start transition-all duration-300",
-                                      page.icon
-                                        ? "opacity-100 scale-100 [&_svg]:!size-[5.25rem] [&_svg]:stroke-[2.2]"
-                                        : page.trashedAt || page.isLocked
-                                          ? "opacity-0"
-                                          : isNewPage
-                                            ? "opacity-100 animate-slow-pulse hover:scale-105"
-                                            : "opacity-0 group-hover:opacity-100 hover:scale-105",
-                                      // 模态浮层（右键菜单/下拉菜单）打开时隐藏提示并暂停脉冲，
-                                      // 避免菜单旁忽隐忽现的"幽灵阴影"
-                                      !page.icon &&
-                                        "[body[data-scroll-locked]_&]:!opacity-0 [body[data-scroll-locked]_&]:!animate-none",
-                                    )}
+                                  <IconSelector
+                                    value={page.icon}
+                                    onChange={(icon) =>
+                                      !page.trashedAt &&
+                                      !page.isLocked &&
+                                      updatePage(activePageId, { icon })
+                                    }
                                   >
-                                    {page.icon ? (
-                                      (LucideIcons as any)[page.icon] ? (
-                                        (() => {
-                                          const Icon = (LucideIcons as any)[
-                                            page.icon
-                                          ];
-                                          return <Icon />;
-                                        })()
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className={cn(
+                                        "inline-flex h-auto w-auto p-0 items-center justify-start transition-all duration-300",
+                                        page.icon
+                                          ? "opacity-100 scale-100 [&_svg]:!size-[5.25rem] [&_svg]:stroke-[2.2]"
+                                          : page.trashedAt || page.isLocked
+                                            ? "opacity-0"
+                                            : isNewPage
+                                              ? "opacity-100 animate-slow-pulse hover:scale-105"
+                                              : "opacity-0 group-hover:opacity-100 hover:scale-105",
+                                        // 模态浮层（右键菜单/下拉菜单）打开时隐藏提示并暂停脉冲，
+                                        // 避免菜单旁忽隐忽现的"幽灵阴影"
+                                        !page.icon &&
+                                          "[body[data-scroll-locked]_&]:!opacity-0 [body[data-scroll-locked]_&]:!animate-none",
+                                      )}
+                                    >
+                                      {page.icon ? (
+                                        (LucideIcons as any)[page.icon] ? (
+                                          (() => {
+                                            const Icon = (LucideIcons as any)[
+                                              page.icon
+                                            ];
+                                            return <Icon />;
+                                          })()
+                                        ) : (
+                                          <span className="text-[5.25rem] leading-none">
+                                            {page.icon}
+                                          </span>
+                                        )
                                       ) : (
-                                        <span className="text-[5.25rem] leading-none">
-                                          {page.icon}
-                                        </span>
-                                      )
-                                    ) : (
-                                      <div className="flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted px-2 py-1 rounded-md">
-                                        <LucideIcons.Smile className="h-4 w-4" />
-                                        <span>添加图标</span>
-                                      </div>
-                                    )}
-                                  </Button>
-                                </IconSelector>
-                              </div>
-                            )}
-                          </div>
+                                        <div className="flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted px-2 py-1 rounded-md">
+                                          <LucideIcons.Smile className="h-4 w-4" />
+                                          <span>添加图标</span>
+                                        </div>
+                                      )}
+                                    </Button>
+                                  </IconSelector>
+                                </div>
+                              )}
+                            </div>
 
-                          <Editor
-                            ref={editorRef}
-                            editable={!page.isLocked && !page.trashedAt}
-                          />
-                        </div>
-                      );
-                    })()}
+                            <ErrorBoundary
+                              resetKey={activePageId}
+                              fallback={(_, reset) => (
+                                <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
+                                  <p>当前页面渲染失败，已阻止整窗白屏。</p>
+                                  <button
+                                    type="button"
+                                    onClick={reset}
+                                    className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-[var(--goose-interactive-hover)]"
+                                  >
+                                    重试
+                                  </button>
+                                </div>
+                              )}
+                            >
+                              <Editor
+                                ref={editorRef}
+                                editable={!page.isLocked && !page.trashedAt}
+                              />
+                            </ErrorBoundary>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    {/* NotebookAiPanel 接线 */}
+                    {aiEnabled && aiPanelOpen && activeNotebookId && (
+                      <NotebookAiPanel
+                        notebookId={activeNotebookId}
+                        onClose={closeAiPanel}
+                      />
+                    )}
                   </div>
-                  {/* NotebookAiPanel 接线 */}
-                  {aiEnabled && aiPanelOpen && activeNotebookId && (
-                    <NotebookAiPanel
-                      notebookId={activeNotebookId}
-                      onClose={closeAiPanel}
-                    />
-                  )}
-                </div>
                 </EditorHostBridge>
               </>
             ) : (

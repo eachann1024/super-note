@@ -21,6 +21,8 @@ export {
   ensureFirstTitleHeading,
 } from "./normalize";
 
+export { createEditorSafeContent } from "./editorSafeContent";
+
 import type { PartialBlock } from "@blocknote/core";
 import type { PageContent } from "./legacyMigration";
 import type { BlockNoteContent } from "./emptyContent";
@@ -81,8 +83,7 @@ export function extractPlainText(content: PageContent | undefined): string {
         if (typeof inline === "string") parts.push(inline);
         else if (inline?.type === "link" && Array.isArray(inline.content)) {
           parts.push(...inline.content.map((c: any) => c?.text ?? ""));
-        }
-        else if (inline?.text) parts.push(inline.text);
+        } else if (inline?.text) parts.push(inline.text);
       }
     } else if (block.content?.rows) {
       for (const row of block.content.rows) {
@@ -98,7 +99,9 @@ export function extractPlainText(content: PageContent | undefined): string {
   return parts.join(" ").trim();
 }
 
-export function extractBlockNoteTitle(content: PageContent | undefined): string {
+export function extractBlockNoteTitle(
+  content: PageContent | undefined,
+): string {
   const blocks = normalizePageContent(content);
   const first = blocks[0] as any;
   if (first?.type === "heading") {

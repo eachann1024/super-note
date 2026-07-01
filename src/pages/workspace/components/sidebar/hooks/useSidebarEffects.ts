@@ -1,16 +1,45 @@
 import { deletePageWithUndo } from "@/lib/page-delete-actions";
 import { usePages } from "@/stores/usePages";
+import { useSidebarView } from "@/stores/useSidebarView";
 
 interface UseSidebarEffectsOptions {
   activePageId?: string | null | undefined;
+  activeNotebookId?: string | null | undefined;
   currentView: string;
   onOpenSettings: (tab?: "general" | "appearance" | "ai" | "data") => void;
 }
 
 export function useSidebarEffects({
+  activeNotebookId,
   currentView,
   onOpenSettings,
 }: UseSidebarEffectsOptions) {
+  const resolveDeleteTargetPageId = useCallback(
+    (target: HTMLElement) => {
+      const activePageId = usePages.getState().activePageId;
+      const isInSidebarTree = !!target.closest(".rct-main-tree");
+      if (!isInSidebarTree || !activeNotebookId) return activePageId;
+
+      const view = useSidebarView.getState();
+      const candidateIds = [
+        view.focusedByNotebook[activeNotebookId] ?? null,
+        view.selectedByNotebook[activeNotebookId] ?? null,
+        activePageId,
+      ];
+
+      for (const candidateId of candidateIds) {
+        if (!candidateId || candidateId === "root") continue;
+        const page = usePages.getState().pages[candidateId];
+        if (!page || page.trashedAt) continue;
+        if (page.workspaceId !== activeNotebookId) continue;
+        return candidateId;
+      }
+
+      return activePageId;
+    },
+    [activeNotebookId],
+  );
+
   const handleDeleteShortcut = useCallback(
     (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -22,14 +51,14 @@ export function useSidebarEffects({
         target.tagName === "TEXTAREA";
 
       if ((e.metaKey || e.ctrlKey) && e.key === "Backspace") {
-        const currentActivePageId = usePages.getState().activePageId;
-        if (currentActivePageId && !isInEditor && currentView === "pages") {
+        const deleteTargetPageId = resolveDeleteTargetPageId(target);
+        if (deleteTargetPageId && !isInEditor && currentView === "pages") {
           e.preventDefault();
-          void deletePageWithUndo(currentActivePageId);
+          void deletePageWithUndo(deleteTargetPageId);
         }
       }
     },
-    [currentView],
+    [currentView, resolveDeleteTargetPageId],
   );
 
   useEffect(() => {
