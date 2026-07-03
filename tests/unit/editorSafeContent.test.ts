@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import { expect, test } from "playwright/test";
 import { createEditorSafeContent } from "../../src/components/editor/utils/blocknote-content/editorSafeContent";
 
 const inlineSchema = {
@@ -18,17 +18,30 @@ const linkedInlineContent = [
   { type: "text", text: " now" },
 ];
 
-const sanitizedParagraph = createEditorSafeContent(
-  [{ type: "paragraph", content: linkedInlineContent }],
-  inlineSchema,
-);
+test("createEditorSafeContent preserves inline links", () => {
+  const sanitizedParagraph = createEditorSafeContent(
+    [{ type: "paragraph", content: linkedInlineContent }],
+    inlineSchema,
+  );
 
-assert.deepEqual(sanitizedParagraph, [
-  { type: "paragraph", content: linkedInlineContent },
-]);
+  expect(sanitizedParagraph).toEqual([
+    { type: "paragraph", content: linkedInlineContent },
+  ]);
 
-const sanitizedTable = createEditorSafeContent(
-  [
+  const sanitizedTable = createEditorSafeContent(
+    [
+      {
+        type: "table",
+        content: {
+          type: "tableContent",
+          rows: [{ cells: [linkedInlineContent] }],
+        },
+      },
+    ],
+    inlineSchema,
+  );
+
+  expect(sanitizedTable).toEqual([
     {
       type: "table",
       content: {
@@ -36,19 +49,5 @@ const sanitizedTable = createEditorSafeContent(
         rows: [{ cells: [linkedInlineContent] }],
       },
     },
-  ],
-  inlineSchema,
-);
-
-assert.deepEqual(sanitizedTable, [
-  {
-    type: "table",
-    content: {
-      type: "tableContent",
-      rows: [{ cells: [linkedInlineContent] }],
-    },
-  },
-]);
-
-console.log("editorSafeContent preserves inline links");
-process.exit(0);
+  ]);
+});
