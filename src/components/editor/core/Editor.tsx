@@ -97,11 +97,9 @@ import { isLinkworthyText } from "@/components/editor/utils/clipboard";
 import { useEditorShortcuts } from "@/components/editor/hooks/useEditorShortcuts";
 import { useEditorPaste } from "@/components/editor/hooks/useEditorPaste";
 import { pasteClipboardFilesFromClipboard } from "@/components/editor/utils/pasteClipboardFilesFromClipboard";
-import {
-  clipboardHasPasteableImage,
-  resolveImageMimeForUpload,
-  shouldUploadViaImageStorage,
-} from "@/components/editor/utils/pasteClipboardImage";
+import { clipboardHasPasteableImage } from "@/components/editor/utils/pasteClipboardImage";
+import { uploadEditorFile } from "@/components/editor/utils/uploadEditorFile";
+import { fileStorage, getFileUploadAvailability } from "@/lib/fileStorage";
 
 export interface EditorRef {
   editor: ReturnType<typeof useCreateBlockNote> | null;
@@ -313,15 +311,12 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor(
         },
       },
       uploadFile: async (file, blockId) => {
-        if (
-          shouldUploadViaImageStorage(file, blockId, (id) =>
-            editorInstanceRef.current?.getBlock(id),
-          )
-        ) {
-          const mime = resolveImageMimeForUpload(file);
-          return platformRef.current.imageStorage.save(file, mime);
-        }
-        return URL.createObjectURL(file);
+        return uploadEditorFile(file, blockId, {
+          getBlock: (id) => editorInstanceRef.current?.getBlock(id),
+          imageStorage: platformRef.current.imageStorage,
+          fileStorage,
+          getFileUploadAvailability,
+        });
       },
       pasteHandler: ({ event, editor: ed, defaultPasteHandler }) => {
         if (clipboardHasPasteableImage(event.clipboardData)) {

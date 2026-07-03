@@ -30,16 +30,64 @@ const getImageStorage = async () => {
   return imageStoragePromise;
 };
 
-function parseBase64Image(
+function parseBase64Asset(
   src: string,
 ): { data: string; mimeType: string; extension: string } | null {
-  const match = src.match(/^data:(image\/([a-zA-Z+]+));base64,(.+)$/);
+  const match = src.match(/^data:([^;,]+);base64,(.+)$/);
   if (!match) return null;
+  const mimeType = match[1];
+  const subtype = mimeType.split("/")[1] || "bin";
   return {
-    mimeType: match[1],
-    extension: match[2] === "jpeg" ? "jpg" : match[2],
-    data: match[3],
+    mimeType,
+    extension: extensionFromMimeType(mimeType, subtype),
+    data: match[2],
   };
+}
+
+function extensionFromMimeType(mimeType: string, fallback = "bin"): string {
+  const normalized = mimeType.toLowerCase();
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+    "image/bmp": "bmp",
+    "image/x-icon": "ico",
+    "application/pdf": "pdf",
+    "application/zip": "zip",
+    "text/plain": "txt",
+    "text/markdown": "md",
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "video/mp4": "mp4",
+  };
+  const sanitizedFallback = fallback
+    .replace(/^x-/, "")
+    .replace(/[^a-z0-9]+/g, "");
+  return map[normalized] ?? (sanitizedFallback || "bin");
+}
+
+function mimeTypeFromAssetPath(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase() || "";
+  const map: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    bmp: "image/bmp",
+    ico: "image/x-icon",
+    pdf: "application/pdf",
+    zip: "application/zip",
+    txt: "text/plain",
+    md: "text/markdown",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    mp4: "video/mp4",
+  };
+  return map[ext] ?? "application/octet-stream";
 }
 
 function getRelativeAssetPath(filename: string, depth: number): string {
@@ -49,7 +97,7 @@ function getRelativeAssetPath(filename: string, depth: number): string {
   return `${prefix}assets/${filename}`;
 }
 
-function guessExtFromPath(filePath: string): string {
+function guessImageExtFromPath(filePath: string): string {
   const ext = filePath.split(".").pop()?.toLowerCase();
   if (ext && ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"].includes(ext))
     return ext === "jpeg" ? "jpg" : ext;
@@ -91,6 +139,7 @@ async function extractImagesFromContent(
   content: any[],
   assetsFolder: JSZipNs,
   imageMap: Map<string, string>,
+  usedAssetNames: Set<string>,
   depth: number,
   notebookPath?: string,
   pageFilePath?: string,
@@ -101,12 +150,13 @@ async function extractImagesFromContent(
   for (const block of content) {
     if (!block || typeof block !== "object") continue;
 
-    if (block.type === "image" && block.props?.url) {
+    if ((block.type === "image" || block.type === "file") && block.props?.url) {
       const src = block.props.url;
       let finalSrc = src;
+      const isImage = block.type === "image";
 
       // 1) 内部存储引用（uuid: / att:）→ 加载为 blob → base64
-      if (src.startsWith("uuid:") || src.startsWith("att:")) {
+      if (isImage && (src.startsWith("uuid:") || src.startsWith("att:"))) {
         const { imageStorage } = await getImageStorage();
         const blob = await imageStorage.load(src);
         if (blob) {
@@ -115,23 +165,31 @@ async function extractImagesFromContent(
           finalSrc = fallbackBase64;
         }
       }
+      if (!isImage && src.startsWith("att-file:")) {
+        const { fileStorage } = await import("@/lib/fileStorage");
+        const blob = await fileStorage.load(src);
+        if (blob) {
+          finalSrc = await blobToBase64(blob);
+        }
+      }
 
       // 2) 本地文件路径（相对/绝对）→ 从文件系统读取
-      if (isLocalFilePath(src)) {
+      if (isImage && isLocalFilePath(src)) {
         if (imageMap.has(src)) {
           block.props.url = getRelativeAssetPath(imageMap.get(src)!, depth);
           continue;
         }
         const base64Data = resolveAndReadBase64(notebookPath, src, pageFilePath);
         if (base64Data) {
-          const ext = guessExtFromPath(src);
+          const ext = guessImageExtFromPath(src);
           // 用原始文件名，避免重名加随机后缀
           const rawName = src.split(/[\\/]/).pop() || `img_${Date.now()}.${ext}`;
-          const uniqueName = imageMap.has(rawName)
+          const uniqueName = usedAssetNames.has(rawName)
             ? `${rawName.replace(/\.([^.]+)$/, "")}_${Math.random().toString(36).slice(2, 6)}.${ext}`
             : rawName;
           assetsFolder.file(uniqueName, base64Data, { base64: true });
           imageMap.set(src, uniqueName);
+          usedAssetNames.add(uniqueName);
           block.props.url = getRelativeAssetPath(uniqueName, depth);
         }
         continue;
@@ -144,20 +202,37 @@ async function extractImagesFromContent(
       }
 
       // 4) base64 内联图 → 解析并存入 assets
-      if (finalSrc.startsWith("data:image")) {
-        const parsed = parseBase64Image(finalSrc);
+      if (finalSrc.startsWith("data:")) {
+        const parsed = parseBase64Asset(finalSrc);
         if (parsed) {
-          const filename = `img_${Math.random().toString(36).slice(2, 9)}_${Date.now()}.${parsed.extension}`;
+          const fallbackPrefix = isImage ? "img" : "file";
+          const rawName =
+            !isImage && typeof block.props?.name === "string"
+              ? block.props.name
+              : "";
+          const hasExt = /\.[a-zA-Z0-9]{1,8}$/.test(rawName);
+          const candidate = rawName
+            ? hasExt
+              ? rawName
+              : `${rawName}.${parsed.extension}`
+            : `${fallbackPrefix}_${Math.random().toString(36).slice(2, 9)}_${Date.now()}.${parsed.extension}`;
+          const filename = usedAssetNames.has(candidate)
+            ? `${candidate.replace(/\.([^.]+)$/, "")}_${Math.random().toString(36).slice(2, 6)}.${parsed.extension}`
+            : candidate;
           assetsFolder.file(filename, parsed.data, { base64: true });
 
           imageMap.set(finalSrc, filename);
+          if (src !== finalSrc) {
+            imageMap.set(src, filename);
+          }
+          usedAssetNames.add(filename);
           block.props.url = getRelativeAssetPath(filename, depth);
         }
       }
     }
 
     if (block.children?.length) {
-      await extractImagesFromContent(block.children, assetsFolder, imageMap, depth, notebookPath, pageFilePath);
+      await extractImagesFromContent(block.children, assetsFolder, imageMap, usedAssetNames, depth, notebookPath, pageFilePath);
     }
   }
 }
@@ -175,6 +250,20 @@ function normalizeExportContent(content: Page["content"]): BlockNoteContent {
   }
 }
 
+function getPageDepth(page: Page, pageMap: Map<string, Page>): number {
+  let depth = 0;
+  let parentId = page.parentId;
+  const visited = new Set<string>();
+  while (parentId && !visited.has(parentId)) {
+    visited.add(parentId);
+    const parent = pageMap.get(parentId);
+    if (!parent) break;
+    depth += 1;
+    parentId = parent.parentId;
+  }
+  return depth;
+}
+
 export interface ExportOptions {
   format: "md" | "html";
   notebookIds: string[];
@@ -188,6 +277,7 @@ export async function generateExportZip(
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   const { format, notebookIds } = options;
+  const exportMetadataPages: Page[] = [];
 
   for (const notebookId of notebookIds) {
     const notebook = notebooksMap[notebookId];
@@ -203,32 +293,44 @@ export async function generateExportZip(
 
     // 每个笔记本独立的 imageMap，避免跨笔记本冲突
     const imageMap = new Map<string, string>();
+    const usedAssetNames = new Set<string>();
 
     const notebookPages = allPages.filter(
       (p) => p.workspaceId === notebookId && !p.trashedAt,
     );
+    const notebookMetadataPages = allPages.filter(
+      (p) => p.workspaceId === notebookId,
+    );
 
     const pageMap = new Map<string, Page>();
-    notebookPages.forEach((p) => pageMap.set(p.id, p));
+    notebookMetadataPages.forEach((p) => pageMap.set(p.id, p));
+    const visiblePageMap = new Map<string, Page>();
+    notebookPages.forEach((p) => visiblePageMap.set(p.id, p));
 
     const notebookPath = notebook.localPath;
+    const processedPages = new Map<string, Page>();
 
-    const processPage = async (
-      page: Page,
-      parentFolder: JSZipNs,
-      depth: number,
-    ) => {
+    for (const page of notebookMetadataPages) {
       const pageClone = structuredClone(page) as Page;
       pageClone.content = normalizeExportContent(pageClone.content);
-
       await extractImagesFromContent(
         pageClone.content,
         assetsFolder,
         imageMap,
-        depth,
+        usedAssetNames,
+        getPageDepth(page, pageMap),
         notebookPath,
         page.localFilePath,
       );
+      processedPages.set(page.id, pageClone);
+      exportMetadataPages.push(pageClone);
+    }
+
+    const processPage = async (
+      page: Page,
+      parentFolder: JSZipNs,
+    ) => {
+      const pageClone = processedPages.get(page.id) ?? page;
 
       let content = "";
       let extension = "";
@@ -269,18 +371,18 @@ export async function generateExportZip(
         const subFolder = parentFolder.folder(subFolderName);
         if (subFolder) {
           for (const child of children) {
-            await processPage(child, subFolder, depth + 1);
+            await processPage(child, subFolder);
           }
         }
       }
     };
 
     const rootPages = notebookPages.filter(
-      (p) => !p.parentId || !pageMap.has(p.parentId),
+      (p) => !p.parentId || !visiblePageMap.has(p.parentId),
     );
 
     for (const p of rootPages) {
-      await processPage(p, notebookFolder, 0);
+      await processPage(p, notebookFolder);
     }
   }
 
@@ -326,7 +428,7 @@ export async function generateExportZip(
       {
         version: 1,
         notebooks: exportNotebooksList,
-        pages: exportPagesList,
+        pages: exportMetadataPages,
         history: exportHistory,
       },
       null,
@@ -404,8 +506,7 @@ export async function importNotebooksFromZip(
       const file = folder.file(p);
       if (file) {
         const base64 = await file.async("base64");
-        const ext = p.split(".").pop()?.toLowerCase() || "png";
-        const mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
+        const mimeType = mimeTypeFromAssetPath(p);
         map.set(p, `data:${mimeType};base64,${base64}`);
       }
     }
@@ -415,11 +516,17 @@ export async function importNotebooksFromZip(
   // 根级 assets（旧导出格式兼容）
   const rootAssetMap = await loadAssetsFromFolder(zip.folder("assets"));
 
-  const restoreImages = (blocks: any[], notebookAssetMap: Map<string, string>) => {
+  const restoreBundledAssets = (blocks: any[], notebookAssetMap: Map<string, string>) => {
     for (const block of blocks) {
       if (!block || typeof block !== "object") continue;
       if (
-        (block.type === "image" || block.type === "imageResize") &&
+        (
+          block.type === "image" ||
+          block.type === "imageResize" ||
+          block.type === "file" ||
+          block.type === "audio" ||
+          block.type === "video"
+        ) &&
         block.props?.url
       ) {
         const src = block.props.url as string;
@@ -434,7 +541,7 @@ export async function importNotebooksFromZip(
           }
         }
       }
-      if (block.children?.length) restoreImages(block.children, notebookAssetMap);
+      if (block.children?.length) restoreBundledAssets(block.children, notebookAssetMap);
     }
   };
 
@@ -460,7 +567,7 @@ export async function importNotebooksFromZip(
           const pageData = { ...page };
           const assetMap = notebookAssetMaps.get(page.workspaceId);
           if (pageData.content && assetMap) {
-            restoreImages(pageData.content, assetMap);
+            restoreBundledAssets(pageData.content, assetMap);
           }
           await onCreatePage(pageData, page.workspaceId, page.parentId, page.id);
         }
@@ -606,7 +713,7 @@ export async function importNotebooksFromZip(
           delete (pageData as any).id;
           delete (pageData as any).workspaceId;
           delete (pageData as any).parentId;
-          if (pageData.content) restoreImages(pageData.content, notebookAssetMap);
+          if (pageData.content) restoreBundledAssets(pageData.content, notebookAssetMap);
         } catch (e) {
           console.error("Failed to parse JSON page", e);
         }
@@ -629,7 +736,7 @@ export async function importNotebooksFromZip(
         } else {
           pageData = { content };
         }
-        if (pageData.content) restoreImages(pageData.content, notebookAssetMap);
+        if (pageData.content) restoreBundledAssets(pageData.content, notebookAssetMap);
       }
 
       const newId = await onCreatePage(pageData, workspaceId, parentId);

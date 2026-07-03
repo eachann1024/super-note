@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useBlockNoteEditor } from "@blocknote/react";
+import { toast } from "sonner";
 
 type EditorFilePanelProps = {
   blockId: string;
@@ -33,13 +34,21 @@ export function EditorFilePanel({ blockId }: EditorFilePanelProps) {
         | undefined;
       if (!uploadFile) return;
 
-      const url = await uploadFile(file);
-      editor.updateBlock(blockId, {
-        props: {
-          name: file.name,
-          url,
-        },
-      } as any);
+      try {
+        const url = await uploadFile(file);
+        editor.updateBlock(blockId, {
+          props: {
+            name: file.name,
+            url,
+          },
+        } as any);
+      } catch (error) {
+        console.error("[file-panel] upload failed", error);
+        toast.error("附件上传失败", {
+          description:
+            error instanceof Error ? error.message : "请稍后重试",
+        });
+      }
     },
     [blockId, editor],
   );
