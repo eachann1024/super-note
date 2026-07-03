@@ -8,6 +8,7 @@ import type { WatermarkConfig } from "./watermark";
 import { normalizeWatermarkConfig } from "./watermark";
 import { buildStyledHTML, renderBlock } from "./domSerializer";
 import { resolveImageUrls } from "./remoteImageResolver";
+import { renderMermaidBlocksAsImages } from "./mermaid";
 
 // ── Loading Overlay ────────────────────────────────────────────
 function createLoadingOverlay(): HTMLElement {
@@ -122,7 +123,7 @@ async function captureElementToPng(element: HTMLElement, filename: string) {
       pixelRatio: 4,
       quality: 0.92,
       cacheBust: false,
-      skipFonts: false,
+      skipFonts: true,
       imagePlaceholder:
         "data:image/svg+xml;charset=utf-8," +
         encodeURIComponent(
@@ -178,6 +179,7 @@ export async function exportPageToImage(
   const title = extractTitleFromContent(page.content);
   const content = structuredClone(page.content) as BlockNoteContent;
   await resolveImageUrls(content);
+  await renderMermaidBlocksAsImages(content, theme);
 
   const container = document.createElement("div");
   container.style.position = "fixed";
@@ -222,6 +224,7 @@ export async function exportSelectionToImage(
 
   const clonedBlocks = structuredClone(selectionBlocks) as BlockNoteContent;
   await resolveImageUrls(clonedBlocks);
+  await renderMermaidBlocksAsImages(clonedBlocks, theme);
 
   const container = document.createElement("div");
   container.style.position = "fixed";

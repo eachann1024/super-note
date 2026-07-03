@@ -22,12 +22,21 @@ export function stripFirstH1(blocks: BlockNoteContent): BlockNoteContent {
   return blocks;
 }
 
+export interface BuildExportMarkdownOptions {
+  includeTitleHeading?: boolean;
+}
+
 export async function buildExportMarkdown(
   page: Page,
   blocks: BlockNoteContent,
+  options: BuildExportMarkdownOptions = {},
 ): Promise<string> {
   if (page.localFilePath) {
     return blocksToMarkdown(blocks);
+  }
+  const includeTitleHeading = options.includeTitleHeading ?? true;
+  if (!includeTitleHeading) {
+    return blocksToMarkdown(stripFirstH1(blocks));
   }
   const title = getPageTitle(page);
   const body = await blocksToMarkdown(stripFirstH1(blocks));
@@ -45,7 +54,11 @@ export async function buildExportHtmlBody(
 }
 
 const _localHaokanStyleBlocks: BlockNoteContent = [
-  titleHeadingBlock("好看的风格.md"),
+  { type: "paragraph", content: "正文" },
+];
+
+const _internalTitleBlocks: BlockNoteContent = [
+  titleHeadingBlock("好看的风格"),
   { type: "paragraph", content: "正文" },
 ];
 
@@ -73,3 +86,16 @@ void buildExportMarkdown(_localHaokanStylePage, _localHaokanStyleBlocks).then(
     }
   },
 );
+
+void buildExportMarkdown(
+  {
+    ..._localHaokanStylePage,
+    localFilePath: undefined,
+  },
+  _internalTitleBlocks,
+  { includeTitleHeading: false },
+).then((md) => {
+  if (md.startsWith("# 好看的风格")) {
+    throw new Error("notebook export must not include filename H1 in content");
+  }
+});

@@ -262,8 +262,8 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       skipTaskbar: true,
       closable: true,
       alwaysOnTop: QUICKNOTE_ALWAYS_ON_TOP,
-      // macOS/Electron 的原生激活窗口阴影过重，且选中/未选中会跳变；小窗保持无外投影。
-      hasShadow: false,
+      // 小窗需要从背景中浮出来；边界感由原生外投影 + Web 内描边共同承担。
+      hasShadow: true,
       roundedCorners: true,
       webPreferences: {
         preload: "preload-quicknote.js",

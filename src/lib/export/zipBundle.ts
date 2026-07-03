@@ -238,6 +238,7 @@ export async function generateExportZip(
           content = await buildExportMarkdown(
             pageClone,
             pageClone.content,
+            { includeTitleHeading: false },
           );
           extension = ".md";
           break;
@@ -250,7 +251,7 @@ export async function generateExportZip(
           content = renderExportHtml(
             getPageTitle(pageClone),
             bodyHtml,
-            !pageClone.localFilePath
+            false,
           );
           extension = ".html";
           break;

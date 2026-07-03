@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { createReactBlockSpec } from "@blocknote/react";
 import { createExtension, defaultProps } from "@blocknote/core";
 import { createHighlightPlugin, type Parser } from "@/components/editor/find/highlightPlugin";
@@ -13,6 +14,7 @@ import { CodeBlockToolbar } from "./CodeBlockToolbar";
 import { MathView } from "@/components/editor/blocks/math/MathView";
 import { MermaidView } from "@/components/editor/blocks/mermaid/MermaidView";
 import { useEditorSettings } from "@/components/editor/platform/hostContext";
+import { renderMermaidSvgForExport } from "@/lib/imageExport/mermaid";
 
 // 主应用与速记小窗均以 highlight.js common（~37 种常用语言）作为代码高亮基线，
 // 把语法包从 ~1MB（all 全量）降到 ~300KB（vendor-markdown 1257KB→530KB）。
@@ -261,6 +263,82 @@ const LATEX_SNIPPETS = [
   { label: "n次根", code: "\\sqrt[n]{x}" },
 ];
 
+type CodePreviewMode = "code" | "preview";
+
+function downloadTextFile(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function CodeBlockPreviewLightbox({
+  open,
+  language,
+  value,
+  onClose,
+}: {
+  open: boolean;
+  language: string;
+  value: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
+  if (!open || typeof document === "undefined") return null;
+
+  const title = language === "math" ? "公式预览" : "Mermaid";
+
+  return createPortal(
+    <div
+      className="goose-code-preview-lightbox"
+      contentEditable={false}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="goose-code-preview-lightbox-panel">
+        <div className="goose-code-preview-lightbox-header">
+          <div className="goose-code-preview-lightbox-title">{title}</div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="关闭预览"
+            onClick={onClose}
+            className="goose-code-preview-lightbox-close h-7 w-7 p-0"
+          >
+            <LucideIcons.X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="goose-code-preview-lightbox-body">
+          {language === "math" ? (
+            <MathView value={value} displayMode={true} />
+          ) : (
+            <MermaidView value={value} />
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function CodeBlockComponent({
   block,
   contentRef,
@@ -270,7 +348,7 @@ function CodeBlockComponent({
   contentRef: any;
   editor: any;
 }) {
-  const { onDefaultCodeBlockWrapChange } = useEditorSettings();
+  const { onDefaultCodeBlockWrapChange, theme } = useEditorSettings();
   const language = (block.props.language as string) || "text";
   const wrap = block.props.wrap === true;
   const collapsed = block.props.collapsed === true;
@@ -280,7 +358,10 @@ function CodeBlockComponent({
   const [isEditingSummary, setIsEditingSummary] = useState(false);
   const [summaryDraft, setSummaryDraft] = useState("");
   const summaryInputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const [showLatexHint, setShowLatexHint] = useState(false);
+  const [previewMode, setPreviewMode] = useState<CodePreviewMode>("code");
+  const [isPreviewLightboxOpen, setIsPreviewLightboxOpen] = useState(false);
 
   const getCodeContent = useCallback(() => {
     let text = "";
@@ -363,13 +444,36 @@ function CodeBlockComponent({
     [insertTextAtCursor],
   );
 
+  const handleDownloadPreview = useCallback(async () => {
+    const text = getCodeContent().trim();
+    if (!text || typeof document === "undefined") return;
+
+    if (language === "mermaid") {
+      try {
+        const isDark =
+          theme === "dark" ||
+          (theme === "system" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        const svg = await renderMermaidSvgForExport(text, isDark ? "dark" : "light");
+        downloadTextFile(svg, "mermaid.svg", "image/svg+xml;charset=utf-8");
+        return;
+      } catch {}
+    }
+
+    downloadTextFile(text, language === "math" ? "formula.tex" : "code.txt", "text/plain;charset=utf-8");
+  }, [getCodeContent, language, theme]);
+
   const textContent = getCodeContent();
   const lineCount = textContent.split("\n").length;
   // 速记小窗精简构建（__GOOSE_LITE__）不渲染 math/mermaid 预览——退化为纯代码块
   // （源码可见、带行号），以甩掉 katex / mermaid 重型依赖。主应用恒为 false，行为不变。
   const isMathOrMermaid =
     !__GOOSE_LITE__ && (language === "math" || language === "mermaid");
+  const canPreview = isMathOrMermaid && textContent.trim().length > 0;
+  const shouldShowPreview = canPreview && previewMode === "preview";
+  const shouldShowSource = !isMathOrMermaid || previewMode === "code" || !canPreview;
   const showLineNumbers = !isMathOrMermaid && !wrap;
+  const visualTitle = language === "math" ? "Math" : "Mermaid";
 
   useEffect(() => {
     if (!isEditingSummary) return;
@@ -380,77 +484,98 @@ function CodeBlockComponent({
     return () => clearTimeout(timer);
   }, [isEditingSummary]);
 
+  useEffect(() => {
+    if (!isMathOrMermaid) {
+      setPreviewMode("code");
+      setIsPreviewLightboxOpen(false);
+      return;
+    }
+    if (!canPreview) {
+      setPreviewMode("code");
+      setIsPreviewLightboxOpen(false);
+      return;
+    }
+    setPreviewMode((current) => (current === "code" ? "preview" : current));
+  }, [isMathOrMermaid, canPreview]);
+
   return (
     <div
       className="goose-code-block-node relative"
       data-collapsed={collapsed ? "true" : "false"}
+      data-visual-preview={isMathOrMermaid ? "true" : undefined}
     >
       {/* Toolbar row */}
       <div className="goose-code-toolbar-row" contentEditable={false}>
         <div className="goose-code-toolbar-left flex items-center gap-0.5 min-w-0 flex-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-label={collapsed ? "展开代码块" : "折叠代码块"}
-            onClick={handleCollapsedChange}
-            className={cn(
-              "h-6 w-6 p-0 shrink-0 rounded-md transition-transform",
-              collapsed && "-rotate-90",
-            )}
-          >
-            <LucideIcons.ChevronDown className="h-3.5 w-3.5" />
-          </Button>
-          <Input
-            ref={summaryInputRef}
-            value={isEditingSummary ? summaryDraft : summary}
-            readOnly={!isEditable || !isEditingSummary}
-            placeholder="添加代码说明"
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              if (!isEditable) return;
-              if (!isEditingSummary) setSummaryDraft(summary);
-            }}
-            onFocus={() => {
-              if (!isEditable) return;
-              if (!isEditingSummary) {
-                setSummaryDraft(summary);
-                setIsEditingSummary(true);
-              }
-            }}
-            onChange={(e) => {
-              if (!isEditingSummary) return;
-              setSummaryDraft(e.target.value);
-            }}
-            onBlur={() => {
-              if (!isEditingSummary) return;
-              handleSummaryCommit();
-            }}
-            onKeyDown={(e) => {
-              if (e.nativeEvent.isComposing) return;
-              if (e.key === "Enter") {
-                e.preventDefault();
-                if (isEditingSummary) handleSummaryCommit();
-                summaryInputRef.current?.blur();
-                return;
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setSummaryDraft(summary);
-                setIsEditingSummary(false);
-                summaryInputRef.current?.blur();
-                return;
-              }
-              e.stopPropagation();
-            }}
-            className={cn(
-              "h-6 w-full min-w-0 rounded-md border-0 bg-transparent px-1.5 text-xs shadow-none",
-              "placeholder:text-muted-foreground/50",
-              "focus-visible:ring-0 focus-visible:ring-offset-0",
-              !isEditingSummary && !summary && "opacity-50",
-              !isEditingSummary && summary && "opacity-70",
-            )}
-          />
+          {isMathOrMermaid ? (
+            <div className="goose-code-visual-title">{visualTitle}</div>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={collapsed ? "展开代码块" : "折叠代码块"}
+                onClick={handleCollapsedChange}
+                className={cn(
+                  "h-6 w-6 p-0 shrink-0 rounded-md transition-transform",
+                  collapsed && "-rotate-90",
+                )}
+              >
+                <LucideIcons.ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+              <Input
+                ref={summaryInputRef}
+                value={isEditingSummary ? summaryDraft : summary}
+                readOnly={!isEditable || !isEditingSummary}
+                placeholder="添加代码说明"
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  if (!isEditable) return;
+                  if (!isEditingSummary) setSummaryDraft(summary);
+                }}
+                onFocus={() => {
+                  if (!isEditable) return;
+                  if (!isEditingSummary) {
+                    setSummaryDraft(summary);
+                    setIsEditingSummary(true);
+                  }
+                }}
+                onChange={(e) => {
+                  if (!isEditingSummary) return;
+                  setSummaryDraft(e.target.value);
+                }}
+                onBlur={() => {
+                  if (!isEditingSummary) return;
+                  handleSummaryCommit();
+                }}
+                onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing) return;
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (isEditingSummary) handleSummaryCommit();
+                    summaryInputRef.current?.blur();
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setSummaryDraft(summary);
+                    setIsEditingSummary(false);
+                    summaryInputRef.current?.blur();
+                    return;
+                  }
+                  e.stopPropagation();
+                }}
+                className={cn(
+                  "h-6 w-full min-w-0 rounded-md border-0 bg-transparent px-1.5 text-xs shadow-none",
+                  "placeholder:text-muted-foreground/50",
+                  "focus-visible:ring-0 focus-visible:ring-offset-0",
+                  !isEditingSummary && !summary && "opacity-50",
+                  !isEditingSummary && summary && "opacity-70",
+                )}
+              />
+            </>
+          )}
         </div>
         <CodeBlockToolbar
           language={language}
@@ -460,13 +585,20 @@ function CodeBlockComponent({
           wrap={wrap}
           onWrapChange={handleWrapChange}
           editable={isEditable}
+          previewMode={previewMode}
+          onPreviewModeChange={setPreviewMode}
+          onOpenPreview={() => {
+            if (canPreview) setIsPreviewLightboxOpen(true);
+          }}
+          onDownloadPreview={handleDownloadPreview}
+          canPreview={canPreview}
         />
       </div>
 
       {/* Code content */}
-      {!collapsed && (
+      {(!collapsed || isMathOrMermaid) && (
         <div className="goose-code-content-wrapper">
-          {showLineNumbers && (
+          {showLineNumbers && shouldShowSource && (
             <div className="goose-code-line-numbers" contentEditable={false}>
               {Array.from({ length: lineCount }).map((_, i) => (
                 <div key={i}>{i + 1}</div>
@@ -478,7 +610,9 @@ function CodeBlockComponent({
               "goose-code-pre",
               wrap && "goose-code-pre-wrap",
               isMathOrMermaid && "goose-code-pre-source",
+              !shouldShowSource && "goose-code-pre-hidden",
             )}
+            aria-hidden={!shouldShowSource}
             onPaste={handlePaste}
           >
             <code
@@ -487,10 +621,12 @@ function CodeBlockComponent({
               style={wrap ? { whiteSpace: "break-spaces", wordBreak: "break-word", overflowWrap: "anywhere" } : undefined}
             />
           </pre>
-          {isMathOrMermaid && textContent && (
+          {shouldShowPreview && (
             <div
+              ref={previewRef}
               contentEditable={false}
               className="goose-code-preview select-none cursor-pointer bg-transparent"
+              onDoubleClick={() => setIsPreviewLightboxOpen(true)}
             >
               {language === "math" && <MathView value={textContent} displayMode={true} />}
               {language === "mermaid" && <MermaidView value={textContent} />}
@@ -498,6 +634,13 @@ function CodeBlockComponent({
           )}
         </div>
       )}
+
+      <CodeBlockPreviewLightbox
+        open={isPreviewLightboxOpen}
+        language={language}
+        value={textContent}
+        onClose={() => setIsPreviewLightboxOpen(false)}
+      />
 
       {/* LaTeX hint panel */}
       {!collapsed && language === "math" && isEditable && (

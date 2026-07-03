@@ -653,6 +653,11 @@
   min-height: 42px;
 }
 
+.goose-code-block-node[data-visual-preview="true"] {
+  min-height: 178px;
+  background-color: hsl(var(--background));
+}
+
 .goose-code-toolbar-row {
   position: absolute;
   top: 8px;
@@ -667,6 +672,17 @@
   color: var(--code-fg, hsl(var(--foreground)));
 }
 
+.goose-code-block-node[data-visual-preview="true"] .goose-code-toolbar-row {
+  position: relative;
+  inset: auto;
+  min-height: 46px;
+  align-items: center;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--code-border, var(--goose-block-subtle-border));
+  background: var(--goose-block-subtle-bg);
+  pointer-events: auto;
+}
+
 .goose-code-toolbar-left,
 .goose-code-toolbar-actions {
   pointer-events: auto;
@@ -675,6 +691,17 @@
 .goose-code-toolbar-left {
   flex: 1;
   min-width: 0;
+}
+
+.goose-code-visual-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: hsl(var(--foreground));
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.2;
 }
 
 .goose-code-toolbar-actions {
@@ -701,6 +728,39 @@
   color: hsl(var(--foreground)) !important;
 }
 
+.goose-code-toolbar-actions-visual {
+  gap: 6px;
+}
+
+.goose-code-toolbar-actions-visual button {
+  min-width: 28px;
+  border-radius: 8px !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.goose-code-toolbar-actions-visual button:hover {
+  background: var(--goose-interactive-hover) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.goose-code-toolbar-actions-visual .goose-code-display-toggle {
+  margin-left: 6px;
+  border: 1px solid var(--goose-block-subtle-border);
+  background: var(--goose-block-subtle-hover);
+}
+
+.goose-code-toolbar-actions-visual .goose-code-display-toggle-button {
+  min-width: 42px;
+  border-radius: 10px !important;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.goose-code-toolbar-actions-visual button.goose-code-action-active {
+  background: var(--goose-interactive-selected) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
 .goose-code-toolbar-actions button:disabled {
   opacity: 0.4;
 }
@@ -724,6 +784,10 @@
   padding-top: 36px;
 }
 
+.goose-code-block-node[data-visual-preview="true"] .goose-code-content-wrapper {
+  padding-top: 0;
+}
+
 .goose-code-pre {
   width: 100%;
   box-sizing: border-box;
@@ -737,6 +801,10 @@
   font-size: 0.85em;
   line-height: 1.7;
   overflow-x: auto;
+}
+
+.goose-code-pre-hidden {
+  display: none;
 }
 
 .goose-code-content-wrapper:has(.goose-code-line-numbers) .goose-code-pre {
@@ -773,10 +841,86 @@
 }
 
 /* math/mermaid 预览 */
-.goose-code-preview-host .goose-code-preview {
+.goose-code-block-node .goose-code-preview {
   padding: 8px 16px;
-  border-top: 1px solid var(--code-border, hsl(var(--border) / 0.2));
   background: transparent;
+  min-height: 132px;
+  overflow: auto;
+}
+
+.goose-code-block-node .goose-code-preview .mermaid-preview {
+  min-width: max-content;
+}
+
+.goose-code-preview-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 22000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.goose-code-preview-lightbox-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1180px, 100%);
+  height: min(760px, 100%);
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--goose-block-subtle-border);
+  border-radius: 14px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+}
+
+.goose-code-preview-lightbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 12px 10px 18px;
+  border-bottom: 1px solid var(--goose-block-subtle-border);
+  background: var(--goose-block-subtle-bg);
+}
+
+.goose-code-preview-lightbox-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.goose-code-preview-lightbox-close {
+  flex: 0 0 auto;
+  color: hsl(var(--muted-foreground));
+}
+
+.goose-code-preview-lightbox-close:hover {
+  background: var(--goose-interactive-hover);
+  color: hsl(var(--foreground));
+}
+
+.goose-code-preview-lightbox-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+}
+
+.goose-code-preview-lightbox-body .mermaid-preview {
+  min-width: max-content;
+  padding: 0;
+}
+
+.goose-code-preview-lightbox-body .katex-display {
+  margin: 0;
 }
 
 /* ===== 自定义文件块（带下载/删除按钮） ===== */

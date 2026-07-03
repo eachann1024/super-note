@@ -260,9 +260,7 @@ export function WorkspaceLayout({
                   isEditorFullWidth={isEditorFullWidth}
                 >
                   <div className="workspace-editor-surface relative ml-0 mt-0 flex min-h-0 flex-1 flex-row gap-2 overflow-hidden !bg-[hsl(var(--goose-shell-bg))]">
-                    <div
-                      className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] bg-[hsl(var(--goose-editor-bg))]"
-                    >
+                    <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] bg-[hsl(var(--goose-editor-bg))]">
                       <PageHeader
                         page={page}
                         onOpenSearch={openWelcomeTabHandler}
@@ -293,7 +291,8 @@ export function WorkspaceLayout({
                                 0,
                             );
                           const isNewPage =
-                            page.createdAt === page.updatedAt && !hasBodyContent;
+                            page.createdAt === page.updatedAt &&
+                            !hasBodyContent;
 
                           return (
                             <div
@@ -371,6 +370,7 @@ export function WorkspaceLayout({
                               </div>
 
                               <ErrorBoundary
+                                key={activePageId}
                                 resetKey={activePageId}
                                 fallback={(_, reset) => (
                                   <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">

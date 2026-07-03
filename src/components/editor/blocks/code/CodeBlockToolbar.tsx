@@ -32,6 +32,11 @@ interface CodeBlockToolbarProps {
   onWrapChange?: (wrap: boolean) => void;
   wrap?: boolean;
   editable?: boolean;
+  previewMode?: "code" | "preview";
+  onPreviewModeChange?: (mode: "code" | "preview") => void;
+  onOpenPreview?: () => void;
+  onDownloadPreview?: () => void;
+  canPreview?: boolean;
 }
 
 export function CodeBlockToolbar({
@@ -42,6 +47,11 @@ export function CodeBlockToolbar({
   onWrapChange,
   wrap = false,
   editable = true,
+  previewMode = "code",
+  onPreviewModeChange,
+  onOpenPreview,
+  onDownloadPreview,
+  canPreview = false,
 }: CodeBlockToolbarProps) {
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState("");
@@ -54,8 +64,12 @@ export function CodeBlockToolbar({
     ? LANGUAGE_DISPLAY_NAMES[language.toLowerCase()] || language
     : "Plain Text";
 
-  const handleCopy = () => {
-    void platform.clipboard.copyText(getCodeContent());
+  const handleCopy = async () => {
+    const content = getCodeContent();
+    await platform.clipboard.copyText(content);
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(content).catch(() => undefined);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -108,6 +122,7 @@ export function CodeBlockToolbar({
 
   const canFormat = FORMAT_SUPPORTED_LANGUAGES.includes((language || "").toLowerCase());
   const isMathOrMermaid = language === "math" || language === "mermaid";
+  const hasVisualPreview = isMathOrMermaid && Boolean(onPreviewModeChange);
   const chipClass = cn(
     "transition-colors duration-150",
     "border border-[var(--goose-block-subtle-border)] bg-[var(--goose-block-subtle-bg)] text-muted-foreground",
@@ -121,7 +136,13 @@ export function CodeBlockToolbar({
 
   return (
     <TooltipProvider delayDuration={600}>
-      <div contentEditable={false} className="goose-code-toolbar-actions inline-flex items-center">
+      <div
+        contentEditable={false}
+        className={cn(
+          "goose-code-toolbar-actions inline-flex items-center",
+          hasVisualPreview && "goose-code-toolbar-actions-visual",
+        )}
+      >
         <div className="flex shrink-0 items-center gap-1">
           {editable && !isMathOrMermaid ? (
             <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
@@ -176,9 +197,109 @@ export function CodeBlockToolbar({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className="inline-flex h-6 cursor-default items-center rounded-md bg-[var(--goose-block-subtle-bg)] px-1.5 font-mono text-[11px] text-muted-foreground">
-              {displayLanguage}
-            </div>
+            !hasVisualPreview && (
+              <div className="inline-flex h-6 cursor-default items-center rounded-md bg-[var(--goose-block-subtle-bg)] px-1.5 font-mono text-[11px] text-muted-foreground">
+                {displayLanguage}
+              </div>
+            )
+          )}
+
+          {hasVisualPreview && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="放大预览"
+                    onClick={onOpenPreview}
+                    disabled={!canPreview}
+                    className={cn("h-7 w-7 p-0", chipClass)}
+                  >
+                    <LucideIcons.Maximize2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>放大预览</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="下载预览"
+                    onClick={onDownloadPreview}
+                    disabled={!canPreview}
+                    className={cn("h-7 w-7 p-0", chipClass)}
+                  >
+                    <LucideIcons.Download className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>下载预览</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopy}
+                    className={cn("h-7 w-7 p-0", chipClass)}
+                    aria-label={copied ? "已复制" : "复制代码"}
+                  >
+                    {copied ? (
+                      <LucideIcons.Check className={cn("h-3.5 w-3.5", "text-[var(--goose-color-success)]")} />
+                    ) : (
+                      <LucideIcons.Copy className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{copied ? "已复制" : "复制代码"}</TooltipContent>
+              </Tooltip>
+
+              <div
+                className="goose-code-display-toggle inline-flex h-7 items-center gap-0.5 rounded-[12px] p-0.5"
+                role="tablist"
+                aria-label="代码块显示模式"
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  role="tab"
+                  aria-selected={previewMode === "code"}
+                  aria-label="显示代码"
+                  onClick={() => onPreviewModeChange?.("code")}
+                  className={cn(
+                    "goose-code-display-toggle-button h-6 px-2.5 text-xs",
+                    chipClass,
+                    previewMode === "code" && "goose-code-action-active",
+                  )}
+                >
+                  代码
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  role="tab"
+                  aria-selected={previewMode === "preview"}
+                  aria-label="显示预览"
+                  onClick={() => onPreviewModeChange?.("preview")}
+                  disabled={!canPreview}
+                  className={cn(
+                    "goose-code-display-toggle-button h-6 px-2.5 text-xs",
+                    chipClass,
+                    previewMode === "preview" && "goose-code-action-active",
+                  )}
+                >
+                  预览
+                </Button>
+              </div>
+            </>
           )}
 
           {editable && onWrapChange && !isMathOrMermaid && (
@@ -223,23 +344,25 @@ export function CodeBlockToolbar({
             </Tooltip>
           )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCopy}
-                className={cn("h-6 w-6 p-0", chipClass)}
-              >
-                {copied ? (
-                  <LucideIcons.Check className={cn(iconSize, "text-[var(--goose-color-success)]")} />
-                ) : (
-                  <LucideIcons.Copy className={iconSize} />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{copied ? "已复制" : "复制代码"}</TooltipContent>
-          </Tooltip>
+          {!hasVisualPreview && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopy}
+                  className={cn("h-6 w-6 p-0", chipClass)}
+                >
+                  {copied ? (
+                    <LucideIcons.Check className={cn(iconSize, "text-[var(--goose-color-success)]")} />
+                  ) : (
+                    <LucideIcons.Copy className={iconSize} />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{copied ? "已复制" : "复制代码"}</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
     </TooltipProvider>
