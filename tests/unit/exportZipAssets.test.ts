@@ -6,6 +6,8 @@ import type { Page } from "../../src/types";
 const notebookId = "notebook-export";
 const imageRef = "att:goose-img/pixel.png";
 const fileRef = "att-file:goose-file/report.pdf";
+const audioRef = "att-file:goose-file/chime.mp3";
+const videoRef = "att-file:goose-file/clip.mp4";
 
 class TestFileReader {
   result: string | ArrayBuffer | null = null;
@@ -42,7 +44,7 @@ class TestFileReader {
   }
 }
 
-function installAttachmentRuntime() {
+function installAttachmentRuntime(onGetAttachment?: (id: string) => void) {
   const attachments = new Map<
     string,
     { data: Uint8Array; type: string }
@@ -59,6 +61,20 @@ function installAttachmentRuntime() {
       {
         data: new TextEncoder().encode("%PDF-1.4\n"),
         type: "application/pdf",
+      },
+    ],
+    [
+      "goose-file/chime.mp3",
+      {
+        data: new Uint8Array([0x49, 0x44, 0x33]),
+        type: "audio/mpeg",
+      },
+    ],
+    [
+      "goose-file/clip.mp4",
+      {
+        data: new Uint8Array([0x00, 0x00, 0x00, 0x18]),
+        type: "video/mp4",
       },
     ],
   ]);
@@ -88,7 +104,10 @@ function installAttachmentRuntime() {
     },
     utools: {
       db: {
-        getAttachment: (id: string) => attachments.get(id)?.data ?? null,
+        getAttachment: (id: string) => {
+          onGetAttachment?.(id);
+          return attachments.get(id)?.data ?? null;
+        },
         getAttachmentType: (id: string) => attachments.get(id)?.type ?? null,
       },
       dbStorage: {
@@ -163,6 +182,60 @@ function buildLocalImagePage(
   };
 }
 
+function buildMediaPage(): Page {
+  return {
+    id: "page-media-export",
+    workspaceId: notebookId,
+    isFolder: false,
+    isLocked: false,
+    isFullWidth: false,
+    fontSize: "default",
+    fontFamily: "default",
+    createdAt: 1,
+    updatedAt: 1,
+    content: [
+      {
+        type: "heading",
+        props: { level: 1 },
+        content: "Media",
+      },
+      {
+        type: "audio",
+        props: {
+          url: audioRef,
+        },
+      },
+      {
+        type: "video",
+        props: {
+          url: videoRef,
+        },
+      },
+    ],
+  };
+}
+
+function buildDuplicateMediaPage(): Page {
+  const page = buildMediaPage();
+  page.id = "page-duplicate-media-export";
+  page.content = [
+    page.content[0],
+    {
+      type: "audio",
+      props: {
+        url: audioRef,
+      },
+    },
+    {
+      type: "audio",
+      props: {
+        url: audioRef,
+      },
+    },
+  ];
+  return page;
+}
+
 async function buildZipBlob() {
   installAttachmentRuntime();
   return generateExportZip(
@@ -219,6 +292,60 @@ test("importNotebooksFromZip restores metadata asset refs to portable data URLs"
   expect(importedContent[2].props.url).toMatch(
     /^data:application\/pdf;base64,/,
   );
+});
+
+test("generateExportZip bundles audio and video attachment refs", async () => {
+  installAttachmentRuntime();
+
+  const zipBlob = await generateExportZip(
+    { format: "md", notebookIds: [notebookId] },
+    { [notebookId]: { name: "Notebook" } },
+    [buildMediaPage()],
+  );
+
+  const zip = await JSZip.loadAsync(zipBlob);
+  const metadataFile = zip.file("backup-metadata.json");
+  expect(metadataFile).not.toBeNull();
+
+  const metadata = JSON.parse(await metadataFile!.async("text"));
+  const [page] = metadata.pages;
+  const audioBlock = page.content[1];
+  const videoBlock = page.content[2];
+
+  expect(audioBlock.props.url).toContain("assets/");
+  expect(audioBlock.props.url).not.toBe(audioRef);
+  expect(videoBlock.props.url).toContain("assets/");
+  expect(videoBlock.props.url).not.toBe(videoRef);
+
+  const assetPaths = Object.keys(zip.files).filter((path) =>
+    path.includes("/assets/"),
+  );
+  expect(assetPaths.some((path) => path.endsWith(".mp3"))).toBe(true);
+  expect(assetPaths.some((path) => path.endsWith(".mp4"))).toBe(true);
+});
+
+test("generateExportZip reuses bundled attachment refs before repeated loads", async () => {
+  const reads: string[] = [];
+  installAttachmentRuntime((id) => reads.push(id));
+
+  const zipBlob = await generateExportZip(
+    { format: "md", notebookIds: [notebookId] },
+    { [notebookId]: { name: "Notebook" } },
+    [buildDuplicateMediaPage()],
+  );
+
+  const zip = await JSZip.loadAsync(zipBlob);
+  const metadataFile = zip.file("backup-metadata.json");
+  expect(metadataFile).not.toBeNull();
+
+  const metadata = JSON.parse(await metadataFile!.async("text"));
+  const [page] = metadata.pages;
+  const firstAudioUrl = page.content[1].props.url;
+  const secondAudioUrl = page.content[2].props.url;
+
+  expect(firstAudioUrl).toContain("assets/");
+  expect(secondAudioUrl).toBe(firstAudioUrl);
+  expect(reads.filter((id) => id === "goose-file/chime.mp3")).toHaveLength(1);
 });
 
 test("generateExportZip keeps same relative image names separate across local folders", async () => {

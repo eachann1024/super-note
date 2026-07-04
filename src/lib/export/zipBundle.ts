@@ -97,11 +97,20 @@ function getRelativeAssetPath(filename: string, depth: number): string {
   return `${prefix}assets/${filename}`;
 }
 
-function guessImageExtFromPath(filePath: string): string {
+const EXPORTABLE_ASSET_BLOCK_TYPES = new Set([
+  "image",
+  "imageResize",
+  "file",
+  "audio",
+  "video",
+]);
+
+function guessAssetExtFromPath(filePath: string, fallback = "bin"): string {
   const ext = filePath.split(".").pop()?.toLowerCase();
-  if (ext && ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"].includes(ext))
+  if (ext && /^[a-z0-9]{1,8}$/.test(ext)) {
     return ext === "jpeg" ? "jpg" : ext;
-  return "png";
+  }
+  return fallback;
 }
 
 /**
@@ -152,10 +161,16 @@ async function extractImagesFromContent(
   for (const block of content) {
     if (!block || typeof block !== "object") continue;
 
-    if ((block.type === "image" || block.type === "file") && block.props?.url) {
+    if (EXPORTABLE_ASSET_BLOCK_TYPES.has(block.type) && block.props?.url) {
       const src = block.props.url;
       let finalSrc = src;
-      const isImage = block.type === "image";
+      const isImage = block.type === "image" || block.type === "imageResize";
+      const isLocalAsset = isLocalFilePath(src);
+
+      if (!isLocalAsset && imageMap.has(src)) {
+        block.props.url = getRelativeAssetPath(imageMap.get(src)!, depth);
+        continue;
+      }
 
       // 1) 内部存储引用（uuid: / att:）→ 加载为 blob → base64
       if (isImage && (src.startsWith("uuid:") || src.startsWith("att:"))) {
@@ -176,7 +191,7 @@ async function extractImagesFromContent(
       }
 
       // 2) 本地文件路径（相对/绝对）→ 从文件系统读取
-      if (isImage && isLocalFilePath(src)) {
+      if (isLocalAsset) {
         const loadedAsset = resolveAndReadBase64(notebookPath, src, pageFilePath);
         if (loadedAsset) {
           const imageMapKey = `local:${loadedAsset.resolvedPath}`;
@@ -184,7 +199,7 @@ async function extractImagesFromContent(
             block.props.url = getRelativeAssetPath(imageMap.get(imageMapKey)!, depth);
             continue;
           }
-          const ext = guessImageExtFromPath(src);
+          const ext = guessAssetExtFromPath(src, isImage ? "png" : "bin");
           // 用原始文件名，避免重名加随机后缀
           const rawName = src.split(/[\\/]/).pop() || `img_${Date.now()}.${ext}`;
           const uniqueName = usedAssetNames.has(rawName)
