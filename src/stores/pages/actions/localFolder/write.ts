@@ -226,7 +226,7 @@ export const saveLocalPageContentAction = async (
     return false;
   }
 
-  const processedContent = content;
+  const processedContent = cloneLocalPageContent(content);
 
   const assetsDir = filePath.replace(/[^\/\\]+$/, "") + "assets";
 

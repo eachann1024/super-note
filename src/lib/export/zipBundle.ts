@@ -112,10 +112,11 @@ function resolveAndReadBase64(
   notebookPath: string | undefined,
   src: string,
   pageFilePath?: string,
-): string | null {
+): { data: string; resolvedPath: string } | null {
   // 绝对路径直接读取
   if (src.startsWith("/") || /^[A-Za-z]:[\\/]/.test(src)) {
-    return readLocalFileAsBase64(src);
+    const data = readLocalFileAsBase64(src);
+    return data ? { data, resolvedPath: src } : null;
   }
 
   // 优先相对于页面文件目录解析
@@ -123,13 +124,14 @@ function resolveAndReadBase64(
     const pageDir = pageFilePath.replace(/[\\/][^\\/]+$/, '');
     const fullPath = resolveToAbsolute(pageDir, src);
     const result = readLocalFileAsBase64(fullPath);
-    if (result) return result;
+    if (result) return { data: result, resolvedPath: fullPath };
   }
 
   // 兜底：相对于笔记本根目录
   if (notebookPath) {
     const fullPath = resolveToAbsolute(notebookPath, src);
-    return readLocalFileAsBase64(fullPath);
+    const data = readLocalFileAsBase64(fullPath);
+    return data ? { data, resolvedPath: fullPath } : null;
   }
 
   return null;
@@ -175,20 +177,21 @@ async function extractImagesFromContent(
 
       // 2) 本地文件路径（相对/绝对）→ 从文件系统读取
       if (isImage && isLocalFilePath(src)) {
-        if (imageMap.has(src)) {
-          block.props.url = getRelativeAssetPath(imageMap.get(src)!, depth);
-          continue;
-        }
-        const base64Data = resolveAndReadBase64(notebookPath, src, pageFilePath);
-        if (base64Data) {
+        const loadedAsset = resolveAndReadBase64(notebookPath, src, pageFilePath);
+        if (loadedAsset) {
+          const imageMapKey = `local:${loadedAsset.resolvedPath}`;
+          if (imageMap.has(imageMapKey)) {
+            block.props.url = getRelativeAssetPath(imageMap.get(imageMapKey)!, depth);
+            continue;
+          }
           const ext = guessImageExtFromPath(src);
           // 用原始文件名，避免重名加随机后缀
           const rawName = src.split(/[\\/]/).pop() || `img_${Date.now()}.${ext}`;
           const uniqueName = usedAssetNames.has(rawName)
             ? `${rawName.replace(/\.([^.]+)$/, "")}_${Math.random().toString(36).slice(2, 6)}.${ext}`
             : rawName;
-          assetsFolder.file(uniqueName, base64Data, { base64: true });
-          imageMap.set(src, uniqueName);
+          assetsFolder.file(uniqueName, loadedAsset.data, { base64: true });
+          imageMap.set(imageMapKey, uniqueName);
           usedAssetNames.add(uniqueName);
           block.props.url = getRelativeAssetPath(uniqueName, depth);
         }

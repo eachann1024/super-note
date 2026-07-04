@@ -63,22 +63,25 @@ test("saveLocalPageContent writes root image data URLs to local assets", async (
   };
   const get = () => state;
 
+  const content = [
+    {
+      type: "image",
+      props: {
+        url: dataUrl,
+        caption: "Pixels",
+      },
+    },
+  ];
+
   const saved = await saveLocalPageContentAction(
     set,
     get,
     pageId,
-    [
-      {
-        type: "image",
-        props: {
-          url: dataUrl,
-          caption: "Pixels",
-        },
-      },
-    ],
+    content,
   );
 
   expect(saved).toBe(true);
+  expect(content[0].props.url).toBe(dataUrl);
   const markdownWrite = writes.find((write) => write.path === filePath);
   expect(markdownWrite?.content).toContain("![Pixels](./assets/img_");
   expect(markdownWrite?.content).not.toContain(dataUrl);

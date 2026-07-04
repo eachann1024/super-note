@@ -136,6 +136,33 @@ function buildPage(): Page {
   };
 }
 
+function buildLocalImagePage(
+  id: string,
+  localFilePath: string,
+): Page {
+  return {
+    id,
+    workspaceId: notebookId,
+    isFolder: false,
+    isLocked: false,
+    isFullWidth: false,
+    fontSize: "default",
+    fontFamily: "default",
+    createdAt: 1,
+    updatedAt: 1,
+    localFilePath,
+    content: [
+      {
+        type: "image",
+        props: {
+          url: "./assets/shared.png",
+          caption: id,
+        },
+      },
+    ],
+  };
+}
+
 async function buildZipBlob() {
   installAttachmentRuntime();
   return generateExportZip(
@@ -192,4 +219,67 @@ test("importNotebooksFromZip restores metadata asset refs to portable data URLs"
   expect(importedContent[2].props.url).toMatch(
     /^data:application\/pdf;base64,/,
   );
+});
+
+test("generateExportZip keeps same relative image names separate across local folders", async () => {
+  const reads: string[] = [];
+  const classes = new Set<string>();
+  (globalThis as any).document = {
+    documentElement: {
+      classList: {
+        add: (className: string) => classes.add(className),
+        remove: (className: string) => classes.delete(className),
+        contains: (className: string) => classes.has(className),
+      },
+      setAttribute: () => undefined,
+      removeAttribute: () => undefined,
+    },
+  };
+  (globalThis as any).window = {
+    matchMedia: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+    localStorage: {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    },
+    gooseFs: {
+      readFileBase64: (path: string) => {
+        reads.push(path);
+        return path.includes("/b/") ? "YmJi" : "YQ==";
+      },
+    },
+  };
+  (globalThis as any).FileReader = TestFileReader;
+
+  const zipBlob = await generateExportZip(
+    { format: "md", notebookIds: [notebookId] },
+    { [notebookId]: { name: "Notebook", localPath: "C:/notes" } },
+    [
+      buildLocalImagePage("page-a", "C:/notes/a/page.md"),
+      buildLocalImagePage("page-b", "C:/notes/b/page.md"),
+    ],
+  );
+
+  const zip = await JSZip.loadAsync(zipBlob);
+  const metadataFile = zip.file("backup-metadata.json");
+  expect(metadataFile).not.toBeNull();
+
+  const metadata = JSON.parse(await metadataFile!.async("text"));
+  const imageUrls = metadata.pages.map(
+    (page: Page) => (page.content as any[])[0].props.url,
+  );
+  const assetPaths = Object.keys(zip.files).filter(
+    (path) => path.includes("/assets/") && !zip.files[path].dir,
+  );
+
+  expect(new Set(imageUrls).size).toBe(2);
+  expect(assetPaths).toHaveLength(2);
+  expect(reads).toEqual([
+    "C:/notes/a/assets/shared.png",
+    "C:/notes/b/assets/shared.png",
+  ]);
 });

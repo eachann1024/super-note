@@ -30,12 +30,12 @@ export function EditorFilePanel({ blockId }: EditorFilePanelProps) {
       if (!file) return;
 
       const uploadFile = (editor as any).uploadFile as
-        | ((file: File) => Promise<string>)
+        | ((file: File, blockId?: string) => Promise<string>)
         | undefined;
       if (!uploadFile) return;
 
       try {
-        const url = await uploadFile(file);
+        const url = await uploadFile(file, blockId);
         editor.updateBlock(blockId, {
           props: {
             name: file.name,

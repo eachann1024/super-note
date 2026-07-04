@@ -23,8 +23,12 @@ export async function uploadEditorFile(
   const getBlock = deps.getBlock
     ? (id: string) => deps.getBlock?.(id) ?? undefined
     : null;
+  const targetBlock = blockId && getBlock ? getBlock(blockId) : undefined;
 
-  if (shouldUploadViaImageStorage(file, blockId, getBlock)) {
+  if (
+    targetBlock?.type !== "file" &&
+    shouldUploadViaImageStorage(file, blockId, getBlock)
+  ) {
     const mime = resolveImageMimeForUpload(file);
     return deps.imageStorage.save(file, mime);
   }

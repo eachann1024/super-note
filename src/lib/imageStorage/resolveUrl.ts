@@ -31,27 +31,39 @@ export async function resolveImageRefToUrl(
     return url
   }
 
-  // 命中缓存：复用已有 ObjectURL
-  const cached = objectUrlCache.get(url)
-  if (cached) return cached
-
   // 本地文件路径（./assets/ 等）
   const { isLocalFilePath, resolveToAbsolute, readLocalFileAsBlobAsync } = await import(
     './strategies/file-system'
   )
   if (isLocalFilePath(url)) {
-    if (pageLocalFilePath) {
-      const pageDir = pageLocalFilePath.replace(/[\\/][^\\/]+$/, '')
-      const fullPath = resolveToAbsolute(pageDir, url)
+    const isAbsolutePath = url.startsWith('/') || /^[A-Za-z]:[\\/]/.test(url)
+    const fullPath = isAbsolutePath
+      ? url
+      : pageLocalFilePath
+        ? resolveToAbsolute(
+            pageLocalFilePath.replace(/[\\/][^\\/]+$/, ''),
+            url,
+          )
+        : null
+
+    if (fullPath) {
+      const cacheKey = `local:${fullPath}`
+      const cached = objectUrlCache.get(cacheKey)
+      if (cached) return cached
+
       const blob = await readLocalFileAsBlobAsync(fullPath)
       if (blob) {
         const objectUrl = URL.createObjectURL(blob)
-        objectUrlCache.set(url, objectUrl)
+        objectUrlCache.set(cacheKey, objectUrl)
         return objectUrl
       }
     }
     return url
   }
+
+  // 命中缓存：复用已有 ObjectURL
+  const cached = objectUrlCache.get(url)
+  if (cached) return cached
 
   // att: / uuid: / 兜底 → imageStorage.load()
   const { imageStorage } = await import('./index')
