@@ -1,20 +1,18 @@
 import { NotebookCreateDialog } from "./NotebookCreateDialog";
 import { NotebookEditDialog } from "./NotebookEditDialog";
 import { renderNotebookIcon } from "./notebookUtils";
+import { activateNotebook } from "@/lib/notebookNavigation";
 import { dialogs } from "@/lib/utools/dialogs";
 
 export function NotebookSwitcher() {
   const {
     notebooks,
     activeNotebookId,
-    setActiveNotebook,
     createNotebook,
     createLocalFolderNotebook,
     updateNotebook,
     deleteNotebook,
-    getLastActivePage,
   } = useNotebooks();
-  const { setActivePage } = usePages();
   const notebookDropdownHoverExpand = useSettings(
     (state) => state.notebookDropdownHoverExpand,
   );
@@ -79,8 +77,11 @@ export function NotebookSwitcher() {
       return;
     }
 
-    createNotebook(createDialog.name.trim(), createDialog.icon);
-    setActivePage(null);
+    const notebookId = createNotebook(
+      createDialog.name.trim(),
+      createDialog.icon,
+    );
+    void activateNotebook(notebookId);
     setCreateDialog({ open: false, name: "", icon: "BookOpen", error: "" });
   };
 
@@ -109,8 +110,7 @@ export function NotebookSwitcher() {
             .loadLocalFolderPages(notebookId, result[0], {
               showWelcome: true,
             });
-          setActiveNotebook(notebookId);
-          setActivePage(null);
+          void activateNotebook(notebookId);
         }
       } else {
         const path = await dialogs.selectDirectory();
@@ -120,8 +120,7 @@ export function NotebookSwitcher() {
           await usePages.getState().loadLocalFolderPages(notebookId, path, {
             showWelcome: true,
           });
-          setActiveNotebook(notebookId);
-          setActivePage(null);
+          void activateNotebook(notebookId);
         }
       }
     } catch (e) {
@@ -232,28 +231,7 @@ export function NotebookSwitcher() {
               )}
               onClick={() => {
                 if (notebook.localPathMissing) return;
-                setActiveNotebook(notebook.id);
-                if (notebook.source === "local-folder") {
-                  setActivePage(null);
-                  setIsOpen(false);
-                  return;
-                }
-                const lastPageId = getLastActivePage(notebook.id);
-                const { pages } = usePages.getState();
-                const lastPage = lastPageId ? pages[lastPageId] : null;
-                if (lastPage && !lastPage.trashedAt) {
-                  setActivePage(lastPageId);
-                } else {
-                  const firstValidPage = Object.values(pages)
-                    .filter(
-                      (p) => p.workspaceId === notebook.id && !p.trashedAt,
-                    )
-                    .sort(
-                      (a, b) =>
-                        (a.order ?? a.createdAt) - (b.order ?? b.createdAt),
-                    )[0];
-                  setActivePage(firstValidPage?.id ?? null);
-                }
+                void activateNotebook(notebook.id);
                 setIsOpen(false);
               }}
             >

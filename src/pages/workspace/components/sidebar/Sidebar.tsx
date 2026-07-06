@@ -93,6 +93,7 @@ export function Sidebar({
     renameValue,
     setRenameValue,
     renamePageId,
+    closeRenameDialog,
     confirmRename,
   } = useRenameDialog();
 
@@ -108,19 +109,34 @@ export function Sidebar({
     setSelectedTrashPageId(null);
   }, []);
 
+  const previousNotebookIdRef = useRef<string | null | undefined>(undefined);
+  const resetSidebarAfterNotebookChange = useCallback(
+    (options: { localFolder: boolean; exitHistory: boolean }) => {
+      setCurrentView("pages");
+      setSelectedTrashPageId(null);
+      setShowSettings(false);
+      closeRenameDialog();
+      if (options.exitHistory) exitHistoryView();
+      if (options.localFolder) void setActivePage(null);
+    },
+    [closeRenameDialog, exitHistoryView, setActivePage],
+  );
+
   useEffect(() => {
-    if (!isLocalFolder) return;
-    exitTrashView();
-    setShowSettings(false);
-    if (inHistoryMode) exitHistoryView();
-    setActivePage(null);
+    const previousNotebookId = previousNotebookIdRef.current;
+    previousNotebookIdRef.current = activeNotebookId;
+    if (previousNotebookId === activeNotebookId) return;
+    if (previousNotebookId === undefined && !isLocalFolder) return;
+
+    resetSidebarAfterNotebookChange({
+      localFolder: isLocalFolder,
+      exitHistory: inHistoryMode,
+    });
   }, [
     activeNotebookId,
-    exitHistoryView,
-    exitTrashView,
     inHistoryMode,
     isLocalFolder,
-    setActivePage,
+    resetSidebarAfterNotebookChange,
   ]);
 
   useEffect(() => {

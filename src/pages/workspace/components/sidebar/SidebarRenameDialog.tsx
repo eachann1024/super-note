@@ -84,10 +84,10 @@ export function useRenameDialog() {
     setRenameDialogOpen(true);
   };
 
-  const closeRenameDialog = () => {
+  const closeRenameDialog = useCallback(() => {
     setRenameDialogOpen(false);
     setRenamePageId(null);
-  };
+  }, []);
 
   const confirmRename = useCallback(async () => {
     if (!renamePageId) return;
