@@ -21,6 +21,8 @@ const TOOL_LABELS: Record<string, string> = {
   "tool-replaceInPage": "批量替换",
   "tool-showTable": "生成表格",
   "tool-showChart": "生成图表",
+  "tool-showDiagram": "生成图形",
+  "tool-showSvg": "生成 SVG",
 };
 
 interface ToolCallCardProps {

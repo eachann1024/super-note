@@ -180,6 +180,20 @@ function getStepText(part: ToolProgressPart): Pick<ProgressStep, "label" | "deta
     };
   }
 
+  if (part.type === "tool-showDiagram") {
+    return {
+      label: "展示图形",
+      detail: title ? `已生成图形《${truncate(title)}》` : "已生成图形",
+    };
+  }
+
+  if (part.type === "tool-showSvg") {
+    return {
+      label: "展示 SVG",
+      detail: title ? `已生成 SVG《${truncate(title)}》` : "已生成 SVG",
+    };
+  }
+
   return { label: "处理内容", detail: "正在处理请求" };
 }
 

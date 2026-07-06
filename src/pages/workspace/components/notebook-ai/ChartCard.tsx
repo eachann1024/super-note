@@ -16,7 +16,8 @@ interface ChartCardProps {
 }
 
 function isDark() {
-  return document.documentElement.classList.contains("dark");
+  const root = document.documentElement;
+  return root.classList.contains("dark") || root.dataset.theme === "dark";
 }
 
 function buildOption(

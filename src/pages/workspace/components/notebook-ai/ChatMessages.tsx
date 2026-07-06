@@ -9,6 +9,9 @@ import { Check, MessageSquareText, Sparkles } from "lucide-react";
 import { ToolProgressCard } from "./ToolProgressCard";
 import { TableCard } from "./TableCard";
 import { ChartCard } from "./ChartCard";
+import { DiagramCard } from "./DiagramCard";
+import { SvgArtifactCard } from "./SvgArtifactCard";
+import { shouldShowToolProgress, type ToolDisplayPart } from "./toolProgressVisibility";
 import { isNotebookAiToolPart } from "@/lib/notebook-ai/messageUtils";
 import type { NotebookAiMessage } from "@/lib/notebook-ai/types";
 
@@ -44,15 +47,6 @@ interface ChatMessagesProps {
   /** 正在流式输出的消息 id（最后一条 assistant msg id）*/
   streamingMessageId?: string;
 }
-
-type ToolDisplayPart = {
-  type: string;
-  state?: string;
-  input?: unknown;
-  output?: unknown;
-  errorText?: string;
-  toolCallId?: string;
-};
 
 const INPUT_ONLY_STATES = new Set([
   "call",
@@ -126,6 +120,35 @@ function renderToolVisual(part: ToolDisplayPart, key: string | number) {
         title={chartData.title}
         categories={chartData.categories}
         series={chartData.series}
+      />
+    );
+  }
+
+  if (part.type === "tool-showDiagram" && part.state === "output-available" && part.output) {
+    const diagramData = part.output as {
+      title?: string;
+      language: "mermaid";
+      source: string;
+    };
+    return (
+      <DiagramCard
+        key={key}
+        title={diagramData.title}
+        source={diagramData.source}
+      />
+    );
+  }
+
+  if (part.type === "tool-showSvg" && part.state === "output-available" && part.output) {
+    const svgData = part.output as {
+      title?: string;
+      svg: string;
+    };
+    return (
+      <SvgArtifactCard
+        key={key}
+        title={svgData.title}
+        svg={svgData.svg}
       />
     );
   }
@@ -228,6 +251,7 @@ export function ChatMessages({
           .filter(isNotebookAiToolPart)
           .filter((part) => shouldShowToolPart(part, isStreaming));
         let renderedToolProgress = false;
+        const showToolProgress = shouldShowToolProgress(toolParts, isStreaming);
 
         return (
           <div key={msg.id} className="space-y-1">
@@ -262,7 +286,7 @@ export function ChatMessages({
                 if (!shouldShowToolPart(toolPart, isStreaming)) return null;
 
                 const visual = renderToolVisual(toolPart, `visual-${pi}`);
-                if (!renderedToolProgress) {
+                if (showToolProgress && !renderedToolProgress) {
                   renderedToolProgress = true;
                   return (
                     <Fragment key={pi}>
