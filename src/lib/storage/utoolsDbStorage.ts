@@ -198,26 +198,21 @@ const deletePrimaryValue = (name: string): void => {
 };
 
 const readStorageValue = (name: string): string | null => {
-  const primaryValue = readPrimaryValue(name);
-  if (primaryValue !== null) return primaryValue;
-
   const fallbackValue = readFallbackValue(name);
-  if (fallbackValue === null) return null;
+  if (fallbackValue !== null) return fallbackValue;
 
-  if (writePrimaryValue(name, fallbackValue)) {
-    deleteFallbackValue(name);
+  const primaryValue = readPrimaryValue(name);
+  if (primaryValue !== null) {
+    writeFallbackValue(name, primaryValue);
+    return primaryValue;
   }
 
-  return fallbackValue;
+  return null;
 };
 
 const writeStorageValue = (name: string, value: string): void => {
-  if (writePrimaryValue(name, value)) {
-    deleteFallbackValue(name);
-    return;
-  }
-
   writeFallbackValue(name, value);
+  writePrimaryValue(name, value);
 };
 
 const deleteStorageValue = (name: string): void => {
