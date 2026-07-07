@@ -14,6 +14,21 @@ function applyStyles(nodes: any[], extra: Record<string, any>): any[] {
   });
 }
 
+function toLinkContent(nodes: any[]): any[] {
+  return nodes.flatMap((node) => {
+    if (typeof node === "string") {
+      return [{ type: "text", text: node, styles: {} }];
+    }
+    if (node?.type === "text") {
+      return [{ ...node, styles: node.styles || {} }];
+    }
+    if (node?.type === "link" && Array.isArray(node.content)) {
+      return toLinkContent(node.content);
+    }
+    return [];
+  });
+}
+
 export function parseInlineMarkdown(text: string): any[] {
   const result: any[] = [];
   if (!text) return result;
@@ -77,7 +92,7 @@ export function parseInlineMarkdown(text: string): any[] {
       result.push({
         type: "link",
         href: match[12],
-        content: [{ type: "text", text: match[11], styles: {} }],
+        content: toLinkContent(parseInlineMarkdown(match[11])),
       });
     }
 

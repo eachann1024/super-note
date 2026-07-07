@@ -40,6 +40,7 @@ import { editorSchema } from "@/components/editor/core/schema";
 import { shouldOpenSlashSuggestionMenu } from "@/components/editor/utils/slashMenuPolicy";
 import { getQuicknoteSlashMenuFloatingOptions } from "@/components/editor/utils/quicknoteSlashMenuFloating";
 import { LocalFileTitle } from "@/pages/workspace/components/page/LocalFileTitle";
+import { shouldUseRawEditorContent } from "@/components/editor/core/editorContentMode";
 
 // Re-exports to prevent broken imports elsewhere
 export {
@@ -209,6 +210,7 @@ export function EditorComposer({
     () => (__GOOSE_LITE__ ? getQuicknoteSlashMenuFloatingOptions() : undefined),
     [],
   );
+  const usesRawEditorContent = shouldUseRawEditorContent(page);
 
   return (
     <EditorContextMenu
@@ -247,8 +249,7 @@ export function EditorComposer({
           // 须与 Editor.tsx 的 isLocalFolderPage 判断保持一致：草稿页(__quicknote_draft__)
           // 同样豁免 normalize，否则 onChange 在此把首块强转 H1 并回写持久化，
           // 导致小窗重开后首块永久变成「标题1」。
-          const isLocalPage =
-            Boolean(page?.localFilePath) || page?.id === "__quicknote_draft__";
+          const isLocalPage = shouldUseRawEditorContent(page);
           const rawContent = clonePageContent(editor.document as BlockNoteContent);
           const nextContent = isLocalPage
             ? rawContent
@@ -287,7 +288,7 @@ export function EditorComposer({
           shouldOpen={(event) =>
             shouldOpenSlashSuggestionMenu(event, editor, {
               allowSlashMenuOnFirstBlock:
-                Boolean(page?.localFilePath) || page?.id === "__quicknote_draft__",
+                usesRawEditorContent,
             })
           }
           suggestionMenuComponent={CustomSlashMenu as any}
@@ -304,7 +305,7 @@ export function EditorComposer({
           shouldOpen={(event) =>
             shouldOpenSlashSuggestionMenu(event, editor, {
               allowSlashMenuOnFirstBlock:
-                Boolean(page?.localFilePath) || page?.id === "__quicknote_draft__",
+                usesRawEditorContent,
             })
           }
           suggestionMenuComponent={CustomSlashMenu as any}

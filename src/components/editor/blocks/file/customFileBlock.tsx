@@ -2,6 +2,17 @@ import { useCallback, useState } from "react";
 import { createFileBlockConfig, fileParse } from "@blocknote/core";
 import { createReactBlockSpec, useUploadLoading } from "@blocknote/react";
 import { FilePanelExtension } from "@blocknote/core/extensions";
+import { toast } from "sonner";
+import { fileStorage } from "@/lib/fileStorage";
+
+function triggerDownload(url: string, name: string): void {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
 
 function CustomFileBlockContent({
   block,
@@ -20,17 +31,27 @@ function CustomFileBlockContent({
     filePanel?.showMenu(block.id);
   }, [editor, block.id]);
 
-  const handleDownload = useCallback(() => {
+  const handleDownload = useCallback(async () => {
     const url = block.props.url;
     const name = block.props.name || "download";
     if (!url) return;
 
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    if (url.startsWith("att-file:")) {
+      const blob = await fileStorage.load(url);
+      if (!blob) {
+        toast.error("附件不存在或尚未同步完成");
+        return;
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      try {
+        triggerDownload(objectUrl, name);
+      } finally {
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      }
+      return;
+    }
+
+    triggerDownload(url, name);
   }, [block.props.url, block.props.name]);
 
   const handleDelete = useCallback(() => {

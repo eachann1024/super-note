@@ -349,6 +349,7 @@ declare global {
   const triggerAutoWebdavBackup: typeof import('./lib/webdavSync').triggerAutoWebdavBackup
   const uToolsStorage: typeof import('./lib/storage').uToolsStorage
   const updateSnapshotAfterWrite: typeof import('./lib/local-md-snapshot').updateSnapshotAfterWrite
+  const uploadEditorFile: typeof import('./components/editor/utils/uploadEditorFile').uploadEditorFile
   const uploadWebdavBackup: typeof import('./lib/webdavSync').uploadWebdavBackup
   const use: typeof import('react').use
   const useActionState: typeof import('react').useActionState
@@ -471,6 +472,9 @@ declare global {
   // @ts-ignore
   export type { SlashMenuPagePolicy } from './components/editor/utils/slashMenuPolicy'
   import('./components/editor/utils/slashMenuPolicy')
+  // @ts-ignore
+  export type { EditorFileUploadDeps } from './components/editor/utils/uploadEditorFile'
+  import('./components/editor/utils/uploadEditorFile')
   // @ts-ignore
   export type { EditorFindState } from './components/editor/hooks/useEditorFind'
   import('./components/editor/hooks/useEditorFind')

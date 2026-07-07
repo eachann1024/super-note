@@ -53,38 +53,55 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
   };
 
   const readStoredString = (storageKey) => {
-    try {
-      if (typeof utools?.dbStorage?.getItem === "function") {
-        const value = utools.dbStorage.getItem(storageKey);
-        if (typeof value === "string") return value;
-      }
-    } catch (error) {
-      console.error("[goose-note] read dbStorage failed:", error);
-    }
-
+    let fallbackValue = null;
     try {
       if (utools?.db?.get) {
         const fallbackDoc = utools.db.get(`${STORAGE_FALLBACK_DOC_PREFIX}${storageKey}`);
-        if (typeof fallbackDoc?.data === "string") return fallbackDoc.data;
-        if (typeof fallbackDoc?.data?.value === "string") return fallbackDoc.data.value;
+        if (typeof fallbackDoc?.data === "string") {
+          fallbackValue = fallbackDoc.data;
+        } else if (typeof fallbackDoc?.data?.value === "string") {
+          fallbackValue = fallbackDoc.data.value;
+        }
       }
     } catch (error) {
       console.error("[goose-note] read fallback storage failed:", error);
+    }
+
+    if (fallbackValue !== null) {
+      return fallbackValue;
+    }
+
+    try {
+      if (typeof utools?.dbStorage?.getItem === "function") {
+        const value = utools.dbStorage.getItem(storageKey);
+        if (typeof value === "string") {
+          try {
+            if (utools?.db?.put && utools?.db?.get) {
+              const docId = `${STORAGE_FALLBACK_DOC_PREFIX}${storageKey}`;
+              const current = utools.db.get(docId);
+              utools.db.put({
+                _id: docId,
+                _rev: current?._rev,
+                data: {
+                  value,
+                  updatedAt: Date.now(),
+                },
+              });
+            }
+          } catch (migrateErr) {
+            console.error("[goose-note] migrate dbStorage to db failed:", migrateErr);
+          }
+          return value;
+        }
+      }
+    } catch (error) {
+      console.error("[goose-note] read dbStorage failed:", error);
     }
 
     return null;
   };
 
   const writeStoredString = (storageKey, value) => {
-    try {
-      if (typeof utools?.dbStorage?.setItem === "function") {
-        utools.dbStorage.setItem(storageKey, value);
-        return;
-      }
-    } catch (error) {
-      console.error("[goose-note] write dbStorage failed:", error);
-    }
-
     try {
       if (utools?.db?.put && utools?.db?.get) {
         const docId = `${STORAGE_FALLBACK_DOC_PREFIX}${storageKey}`;
@@ -100,6 +117,14 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       }
     } catch (error) {
       console.error("[goose-note] write fallback storage failed:", error);
+    }
+
+    try {
+      if (typeof utools?.dbStorage?.setItem === "function") {
+        utools.dbStorage.setItem(storageKey, value);
+      }
+    } catch (error) {
+      console.error("[goose-note] write dbStorage failed:", error);
     }
   };
 

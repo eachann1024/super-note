@@ -40,6 +40,8 @@ export const LEGACY_BLOCK_TYPES = new Set([
   "horizontalRule",
 ]);
 
+const INLINE_CONTENT_TYPES = new Set(["text", "link"]);
+
 export function simpleExtractText(block: any): string {
   if (!block || typeof block !== "object") return "";
   if (typeof block.content === "string") return block.content;
@@ -70,6 +72,12 @@ export function simpleExtractText(block: any): string {
 function isStructuredBlockLike(node: unknown): boolean {
   if (!node || typeof node !== "object") return false;
   const candidateType = (node as { type?: unknown }).type;
+  if (
+    typeof candidateType === "string" &&
+    INLINE_CONTENT_TYPES.has(candidateType)
+  ) {
+    return false;
+  }
   return (
     typeof candidateType === "string" &&
     (VALID_BLOCK_TYPES.has(candidateType) || LEGACY_BLOCK_TYPES.has(candidateType))

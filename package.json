@@ -23,6 +23,7 @@
     "build:debug": "GOOSE_DEBUG=1 tsc -b && GOOSE_DEBUG=1 vite build && GOOSE_DEBUG=1 GOOSE_BUILD_TARGET=quicknote vite build && GOOSE_DEBUG=1 node scripts/utools-build.js",
     "lint": "eslint .",
     "typecheck": "tsc -b --noEmit",
+    "test:unit": "playwright test -c playwright.unit.config.ts",
     "test:e2e": "E2E_AUTO_START=1 playwright test",
     "test:e2e:headed": "E2E_AUTO_START=1 PW_HEADED=1 playwright test",
     "test:e2e:ui": "E2E_AUTO_START=1 playwright test --ui",
