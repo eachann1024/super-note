@@ -26,9 +26,9 @@ function isLightColor(color: string): boolean {
   const hex = color.trim();
   const short = /^#([0-9a-f]{3})$/i.exec(hex);
   const full = /^#([0-9a-f]{6})$/i.exec(hex);
-  let r = 0;
-  let g = 0;
-  let b = 0;
+  let r: number;
+  let g: number;
+  let b: number;
   if (short) {
     r = parseInt(short[1][0] + short[1][0], 16);
     g = parseInt(short[1][1] + short[1][1], 16);
