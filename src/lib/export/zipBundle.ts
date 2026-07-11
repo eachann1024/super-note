@@ -463,7 +463,6 @@ export async function generateExportZip(
             pageClone,
             pageClone.content,
             { includeTitleHeading: false },
-            !pageClone.localFilePath,
           );
           extension = ".md";
           break;

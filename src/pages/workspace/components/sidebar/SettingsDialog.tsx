@@ -264,7 +264,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setExporting(true);
     try {
       const { exportNotebooks } = await import("@/lib/export");
-      const saved = await exportNotebooks(
+      await exportNotebooks(
         {
           format,
           notebookIds: selectedIds,
@@ -272,9 +272,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         notebooks,
         Object.values(pages),
       );
-      if (saved) {
-        toast.success("导出成功");
-      }
+      toast.success("导出成功");
     } catch (err) {
       console.error("Export failed", err);
       toast.error("导出失败", {
