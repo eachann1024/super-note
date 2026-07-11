@@ -1,6 +1,7 @@
 import type { CodeStyle } from "@/stores/useSettings";
 import { SelectableCard } from "@/components/ui/selectable-card";
 import { SettingsSectionCard } from "./settings/SettingsSectionCard";
+import { DEFAULT_FONT_NAMES } from "@/lib/fontLoader";
 
 interface SettingsAppearanceProps {
   theme: "light" | "dark" | "system";
@@ -28,24 +29,20 @@ const codeStyles: { value: CodeStyle; label: string; description: string }[] = [
     description: "流行的暗色开发者风格，浅色自动配对",
   },
   {
-    value: "nord",
+    value: "dracula",
     label: "Dracula",
-    description: "高对比霓虹风格，深浅自动切换",
+    description: "暗色使用 Dracula，浅色搭配柔和亮色",
   },
   { value: "night", label: "Tokyo Night", description: "东京夜系风格，自动适配日夜" },
+  { value: "nord", label: "Nord", description: "兼容旧版 Nord，深浅自动配对" },
 ];
 
 const LEGACY_CODE_STYLE_DISPLAY_MAP: Partial<Record<CodeStyle, CodeStyle>> = {
   default: "github",
-  "nord-light": "night",
+  "nord-light": "nord",
 };
 
 const defaultLabels = { default: "默认", serif: "衬线体", mono: "等宽体" };
-const defaultFonts = {
-  default: "DM Sans",
-  serif: "仓耳今楷",
-  mono: "DM Mono",
-};
 const fontPlaceholders = {
   default: "例：PingFang SC",
   serif: "例：Songti SC",
@@ -81,7 +78,7 @@ export function SettingsAppearance({
   setHideExpandArrows,
 }: SettingsAppearanceProps) {
   const getFontPreview = (type: "default" | "serif" | "mono") =>
-    customFonts[type].font || defaultFonts[type];
+    customFonts[type].font || DEFAULT_FONT_NAMES[type];
   const primaryModifier = getPrimaryModifierKeyDisplay({ style: "symbol" });
   const displayedCodeStyle =
     LEGACY_CODE_STYLE_DISPLAY_MAP[codeStyle] ?? codeStyle;
@@ -168,7 +165,7 @@ export function SettingsAppearance({
               <Label>界面字体大小</Label>
             </div>
             <p className="mt-1 pl-7 text-xs text-muted-foreground">
-              调整整体界面的文字大小；也可随时按 {primaryModifier} + / - / 0 临时缩放。
+              调整整体界面的文字大小；{primaryModifier} + / - / 0 会调整并保存编辑器字号。
             </p>
           </div>
           <div className="flex items-center gap-1 rounded-full bg-[hsl(var(--goose-selected-bg)/0.76)] p-1">

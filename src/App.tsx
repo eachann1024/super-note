@@ -78,7 +78,7 @@ function App() {
     }
 
     restoreLastNoteIfNeeded();
-  }, [hydrated, privacy.autoOpenLastNote, restoreLastNoteIfNeeded, clearActivePageForBlankEntry]);
+  }, [hydrated, restoreLastNoteIfNeeded, clearActivePageForBlankEntry]);
 
   useEffect(() => {
     if (!hydrated || !privacy.autoCloseInactiveTabs) return;

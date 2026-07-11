@@ -199,10 +199,14 @@ export const removePagesMeta = (): void => {
   removeDbStorageItem(PAGES_META_STORAGE_KEY);
 };
 
-export const clearPersistedPages = (): void => {
+export const clearPersistedInternalPages = (): void => {
   UToolsAdapter.db.allDocs(PAGE_DOC_PREFIX).forEach((doc) => removeDoc(doc._id));
+  removePagesMeta();
+};
+
+export const clearPersistedPages = (): void => {
+  clearPersistedInternalPages();
   UToolsAdapter.db
     .allDocs(LOCAL_PAGE_META_DOC_PREFIX)
     .forEach((doc) => removeDoc(doc._id));
-  removePagesMeta();
 };

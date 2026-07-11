@@ -22,7 +22,7 @@ import {
   EditorFormattingToolbar,
   shouldRenderFormattingToolbar,
 } from "@/components/editor/toolbars/formatting";
-import { AIMenuController } from "@blocknote/xl-ai";
+import { AIExtension, AIMenuController } from "@blocknote/xl-ai";
 import { useFormattingToolbarAi } from "@/components/editor/state/formattingToolbarAi";
 import { EditorSideMenu } from "@/components/editor/core/EditorSideMenu";
 import { ImageLightbox } from "@/components/editor/image/ImageLightbox";
@@ -40,6 +40,7 @@ import { shouldOpenSlashSuggestionMenu } from "@/components/editor/utils/slashMe
 import { getQuicknoteSlashMenuFloatingOptions } from "@/components/editor/utils/quicknoteSlashMenuFloating";
 import { LocalFileTitle } from "@/pages/workspace/components/page/LocalFileTitle";
 import { shouldUseRawEditorContent } from "@/components/editor/core/editorContentMode";
+import { useEditorSettings } from "@/components/editor/platform/hostContext";
 
 // Re-exports to prevent broken imports elsewhere
 export {
@@ -116,6 +117,55 @@ export function EditorComposer({
   const [linkPopoverUrl, setLinkPopoverUrl] = useState("");
   const linkPopoverRef = useRef<HTMLDivElement | null>(null);
   const [findBarOpen, setFindBarOpen] = useState(false);
+  const { ai: aiSettings } = useEditorSettings();
+
+  const handleEditorKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (
+      __GOOSE_LITE__ ||
+      event.key !== " " ||
+      event.defaultPrevented ||
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing ||
+      !editable ||
+      !aiSettings.enabled ||
+      page?.localFilePath
+    ) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest(".bn-editor")) return;
+
+    let block: any;
+    try {
+      block = editor.getTextCursorPosition().block;
+    } catch {
+      return;
+    }
+    const content = block?.content;
+    const isEmptyParagraph =
+      block?.type === "paragraph" &&
+      (content === "" ||
+        content == null ||
+        (Array.isArray(content) && content.length === 0));
+    if (!isEmptyParagraph) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (!aiSettings.useCustomProvider) {
+      window.dispatchEvent(new CustomEvent("goose-note:open-ai-panel"));
+      return;
+    }
+
+    const ai = editor.getExtension(AIExtension);
+    if (ai && block.id) {
+      ai.openAIMenuAtBlock(block.id);
+    }
+  };
 
   useEffect(() => {
     const handleOpenFind = () => {
@@ -219,6 +269,7 @@ export function EditorComposer({
       editorContainerRef={editorContainerRef}
       handleEditorBlankMouseDown={handleEditorBlankMouseDown}
       handleEditorPasteCapture={handleEditorPasteCapture}
+      handleEditorKeyDownCapture={handleEditorKeyDownCapture}
       searchProviders={searchProviders}
       customActions={customActions}
       effectiveTheme={effectiveTheme}

@@ -51,6 +51,7 @@ interface EditorContextMenuProps {
   editorContainerRef: React.RefObject<HTMLDivElement | null>;
   handleEditorBlankMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   handleEditorPasteCapture: (event: React.ClipboardEvent<HTMLDivElement>) => void;
+  handleEditorKeyDownCapture?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   searchProviders: any[];
   customActions: any[];
   effectiveTheme: "light" | "dark";
@@ -66,6 +67,7 @@ export function EditorContextMenu({
   editorContainerRef,
   handleEditorBlankMouseDown,
   handleEditorPasteCapture,
+  handleEditorKeyDownCapture,
   searchProviders,
   customActions,
   isEditorFullWidth,
@@ -172,6 +174,7 @@ export function EditorContextMenu({
             ref={editorContainerRef}
             onMouseDown={handleEditorBlankMouseDown}
             onPasteCapture={handleEditorPasteCapture}
+            onKeyDownCapture={handleEditorKeyDownCapture}
             onContextMenuCapture={(e) => {
               if (isExcludedBlockTarget(e.target as HTMLElement)) {
                 e.preventDefault();

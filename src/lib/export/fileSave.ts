@@ -127,11 +127,15 @@ function triggerBrowserDownload(blob: Blob, filename: string): boolean {
   }
 }
 
+export type PromptSaveResult = "saved" | "cancelled";
+
 async function saveBlobViaDialog(
   blob: Blob,
   filename: string,
-): Promise<boolean> {
-  if (typeof window === "undefined") return false;
+): Promise<PromptSaveResult> {
+  if (typeof window === "undefined") {
+    throw new Error("当前环境不支持保存文件");
+  }
 
   const hostWindow = window as Window & {
     utools?: {
@@ -147,7 +151,8 @@ async function saveBlobViaDialog(
   const utools = hostWindow.utools;
   const gooseFs = hostWindow.gooseFs;
   if (!utools || typeof utools.showSaveDialog !== "function" || !gooseFs) {
-    return triggerBrowserDownload(blob, filename);
+    if (triggerBrowserDownload(blob, filename)) return "saved";
+    throw new Error("当前环境不支持保存文件");
   }
 
   const saveResult = await Promise.resolve(
@@ -177,7 +182,7 @@ async function saveBlobViaDialog(
   };
 
   const targetPath = normalizeSavePath(saveResult);
-  if (!targetPath) return true;
+  if (!targetPath) return "cancelled";
 
   const base64 = await blobToBase64(blob);
   const payload = base64.replace(/^data:.*;base64,/, "");
@@ -199,7 +204,7 @@ async function saveBlobViaDialog(
     await Promise.resolve(utools.shellOpenPath(folderPath));
   }
 
-  return true;
+  return "saved";
 }
 
 async function saveBlobViaUTools(
@@ -208,7 +213,7 @@ async function saveBlobViaUTools(
 ): Promise<boolean> {
   const silent = await trySaveToDownloads(blob, filename);
   if (silent) return true;
-  return saveBlobViaDialog(blob, filename);
+  return (await saveBlobViaDialog(blob, filename)) !== "cancelled";
 }
 
 export async function saveBlobAndReveal(
@@ -216,6 +221,17 @@ export async function saveBlobAndReveal(
   filename: string,
 ): Promise<boolean> {
   return saveBlobViaUTools(blob, filename);
+}
+
+/**
+ * 显式询问保存位置。uTools 中使用系统保存对话框，浏览器中回退到下载。
+ * 用户取消时返回 `cancelled`，调用方不应显示“保存成功”。
+ */
+export async function saveBlobWithPrompt(
+  blob: Blob,
+  filename: string,
+): Promise<PromptSaveResult> {
+  return saveBlobViaDialog(blob, filename);
 }
 
 export { triggerBrowserDownload };

@@ -41,7 +41,7 @@ export function CommandPalette() {
     setSearchAllNotebooks,
     showRecentInSearch,
     setShowRecentInSearch,
-    closeTabShortcut,
+    searchPanelCloseShortcut,
   } = useSettings();
   const {
     searchResults,
@@ -122,20 +122,23 @@ export function CommandPalette() {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (open && matchShortcut(e, closeTabShortcut)) {
+      const eventForMatching = e.key === " "
+        ? ({
+            key: "Space",
+            code: e.code,
+            ctrlKey: e.ctrlKey,
+            metaKey: e.metaKey,
+            altKey: e.altKey,
+            shiftKey: e.shiftKey,
+          } as KeyboardEvent)
+        : e;
+      if (open && matchShortcut(eventForMatching, searchPanelCloseShortcut)) {
         e.preventDefault();
         e.stopPropagation();
         setOpen(false);
         return;
       }
 
-      const key = e.key.toLowerCase();
-      if ((key === "k" || key === "p") && (e.metaKey || e.ctrlKey) && !e.repeat) {
-        e.preventDefault();
-        openInNewTabRef.current = false;
-        trackSearchOpened("shortcut");
-        setOpen(true);
-      }
       if (open && e.key === "Tab") {
         e.preventDefault();
         setSearchAllNotebooks(!searchAllNotebooks);
@@ -159,7 +162,7 @@ export function CommandPalette() {
       document.removeEventListener("keydown", down, true);
       window.removeEventListener("goose-note:open-search", handleOpenSearch);
     };
-  }, [open, searchAllNotebooks, closeTabShortcut, setSearchAllNotebooks]);
+  }, [open, searchAllNotebooks, searchPanelCloseShortcut, setSearchAllNotebooks]);
 
   const runCommand = useCallback(async (command: () => void) => {
     command();

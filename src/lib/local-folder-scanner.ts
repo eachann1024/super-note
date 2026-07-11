@@ -60,6 +60,19 @@ export function shouldIgnoreEntry(name: string, hiddenFoldersSet: Set<string>) {
   return name.startsWith(".") || IGNORED_FOLDERS.has(name) || hiddenFoldersSet.has(name);
 }
 
+/** 增量 watch 使用：只要相对路径任一目录段命中扫描器规则，就忽略整条路径。 */
+export function shouldIgnoreLocalRelativePath(
+  relativePath: string,
+  hiddenFolders: readonly string[] = [],
+) {
+  const segments = relativePath
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter((segment) => segment && segment !== ".");
+  const hiddenFoldersSet = new Set(hiddenFolders);
+  return segments.some((segment) => shouldIgnoreEntry(segment, hiddenFoldersSet));
+}
+
 async function readDirectory(gooseFs: GooseFs, dirPath: string): Promise<LocalFolderEntry[]> {
   if (gooseFs.readDirAsync) {
     return (await gooseFs.readDirAsync(dirPath)) || [];

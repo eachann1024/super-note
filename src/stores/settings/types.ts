@@ -9,7 +9,7 @@ export interface SearchProvider {
 
 export type Theme = 'light' | 'dark' | 'system'
 
-export type CodeStyle = 'default' | 'github' | 'modern' | 'night' | 'nord' | 'nord-light'
+export type CodeStyle = 'default' | 'github' | 'modern' | 'night' | 'dracula' | 'nord' | 'nord-light'
 
 export interface UToolsSettings {
     globalSearchEnabled: boolean
@@ -186,10 +186,29 @@ export function normalizeCodeStyle(codeStyle: string | undefined): CodeStyle {
     if (codeStyle in CODE_STYLE_MIGRATION_MAP) {
         return CODE_STYLE_MIGRATION_MAP[codeStyle]
     }
-    if (codeStyle === 'default' || codeStyle === 'github' || codeStyle === 'modern' || codeStyle === 'night' || codeStyle === 'nord' || codeStyle === 'nord-light') {
+    if (codeStyle === 'default' || codeStyle === 'github' || codeStyle === 'modern' || codeStyle === 'night' || codeStyle === 'dracula' || codeStyle === 'nord' || codeStyle === 'nord-light') {
         return codeStyle
     }
     return 'default'
+}
+
+export function resolveCodeTheme(codeStyle: CodeStyle, isDark: boolean): string {
+    switch (codeStyle) {
+        case 'modern':
+            return isDark ? 'one-dark' : 'one-light'
+        case 'night':
+            return isDark ? 'tokyo-night' : 'github-light-mod'
+        case 'dracula':
+            // Dracula 没有官方浅色版；浅色模式搭配项目已有的柔和亮色主题。
+            return isDark ? 'dracula' : 'github-light-mod'
+        case 'nord':
+        case 'nord-light':
+            return isDark ? 'nord' : 'nord-light'
+        case 'default':
+        case 'github':
+        default:
+            return isDark ? 'github-dark' : 'github-light'
+    }
 }
 
 export function normalizeUIFontSize(uiFontSize: string | undefined): UIFontSize {

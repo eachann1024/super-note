@@ -18,6 +18,7 @@
 
 import {
   readDbStorageJSON,
+  removeDbStorageItem,
   writeDbStorageJSON,
 } from "./storage/utoolsDbStorage";
 
@@ -40,6 +41,11 @@ export function writeLocalPageIdMap(
   map: LocalPageIdMap,
 ): void {
   writeDbStorageJSON(storageKey(notebookId), map);
+}
+
+/** 清除某个本地文件夹记事本的页面 ID 映射（仅应用元数据，不触碰磁盘文件）。 */
+export function removeLocalPageIdMap(notebookId: string): void {
+  removeDbStorageItem(storageKey(notebookId));
 }
 
 /** 从文件路径计算相对路径（不含前导斜杠）。 */

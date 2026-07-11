@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useSettings } from "@/stores/settings";
 import { useSidebarView } from "@/stores/useSidebarView";
+import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 
 interface SidebarFooterProps {
   currentView: "pages" | "trash" | "outline";
@@ -24,17 +25,17 @@ export function SidebarFooter({
 }: SidebarFooterProps) {
   const theme = useSettings((s) => s.theme);
   const toggleDarkMode = useSettings((s) => s.toggleDarkMode);
+  const toggleSidebarShortcut = useSettings(
+    (s) => s.appShortcuts.toggleSidebar,
+  );
   const sidebarCollapsed = useSidebarView((s) => s.sidebarCollapsed);
   const toggleSidebarCollapsed = useSidebarView(
     (s) => s.toggleSidebarCollapsed,
   );
-  const toggleSidebarShortcutLabel = formatShortcut("Alt+B");
-
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const toggleSidebarShortcutLabel = toggleSidebarShortcut
+    ? formatShortcut(toggleSidebarShortcut)
+    : "未设置";
+  const isDark = useResolvedTheme(theme) === "dark";
 
   const btnClass =
     "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md p-0 text-muted-foreground transition-colors hover:bg-[var(--goose-interactive-hover)] hover:text-foreground [&_svg]:block";

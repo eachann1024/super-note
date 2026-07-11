@@ -1,10 +1,10 @@
 import type { CustomFonts } from "@/stores/useSettings";
 
-const DEFAULT_FONTS = {
+export const DEFAULT_FONT_NAMES = {
   default: "Inter",
   serif: "仓耳今楷",
   mono: "DM Mono",
-};
+} as const;
 
 // 远程字体 URL（体积大，需预加载）
 const REMOTE_FONTS = [
@@ -129,7 +129,7 @@ export function applyFontVariables(customFonts: CustomFonts) {
     "--font-default",
     buildFontStack(
       customDefaultList,
-      DEFAULT_FONTS.default,
+      DEFAULT_FONT_NAMES.default,
       ["Inter", "HarmonyOS Sans SC"],
       fallbacks.ui,
       "sans-serif",
@@ -139,7 +139,7 @@ export function applyFontVariables(customFonts: CustomFonts) {
     "--font-serif",
     buildFontStack(
       customSerifList,
-      DEFAULT_FONTS.serif,
+      DEFAULT_FONT_NAMES.serif,
       ["仓耳今楷", "Cambria"],
       fallbacks.serif,
       "serif",
@@ -149,7 +149,7 @@ export function applyFontVariables(customFonts: CustomFonts) {
     "--font-mono",
     buildFontStack(
       customMonoList,
-      DEFAULT_FONTS.mono,
+      DEFAULT_FONT_NAMES.mono,
       ["DM Mono"],
       fallbacks.mono,
       "monospace",
@@ -163,9 +163,9 @@ export function getEditorFontFamilies(
 ) {
   const targetType = fontFamily ?? "default";
   const targetFontMap = {
-    default: customFonts.default.font || DEFAULT_FONTS.default,
-    serif: customFonts.serif.font || DEFAULT_FONTS.serif,
-    mono: customFonts.mono.font || DEFAULT_FONTS.mono,
+    default: customFonts.default.font || DEFAULT_FONT_NAMES.default,
+    serif: customFonts.serif.font || DEFAULT_FONT_NAMES.serif,
+    mono: customFonts.mono.font || DEFAULT_FONT_NAMES.mono,
   };
   const fallbackMap = {
     default: ["Inter", "HarmonyOS Sans SC"],

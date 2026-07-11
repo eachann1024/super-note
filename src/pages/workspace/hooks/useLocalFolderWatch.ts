@@ -8,6 +8,8 @@ import {
   updateSnapshotAfterWrite,
 } from "@/lib/local-md-snapshot";
 import { wasRecentlySelfMoved } from "@/stores/pages/actions/localFolder/move";
+import { useSettings } from "@/stores/useSettings";
+import { shouldIgnoreLocalRelativePath } from "@/lib/local-folder-scanner";
 
 interface GooseFs {
   existsAsync?: (path: string) => Promise<boolean>;
@@ -167,11 +169,13 @@ export function useLocalFolderWatch({
         return;
       }
 
-      // 忽略 dot 路径（任一段以 . 开头）：与 local-folder-scanner 的忽略规则
-      // 对齐，并抑制历史后端写 .goose/history/*.json 的自写回声触发全量重扫
+      // 与全量扫描共用忽略规则：dot / 内置忽略目录 / 用户隐藏目录都不进入增量链路。
       if (
         typeof filename === "string" &&
-        filename.split(/[\\/]/).some((seg: string) => seg.startsWith("."))
+        shouldIgnoreLocalRelativePath(
+          filename,
+          useSettings.getState().localFolderHiddenFolders,
+        )
       ) {
         return;
       }

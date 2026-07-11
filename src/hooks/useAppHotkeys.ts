@@ -75,6 +75,21 @@ export function useAppHotkeys() {
     const hasPrimaryModifier = (event: KeyboardEvent) =>
       (event.metaKey || event.ctrlKey) && !event.altKey && !event.repeat;
 
+    const matchesConfiguredShortcut = (event: KeyboardEvent, shortcut: string) =>
+      matchShortcut(
+        event.key === " "
+          ? ({
+              key: "Space",
+              code: event.code,
+              ctrlKey: event.ctrlKey,
+              metaKey: event.metaKey,
+              altKey: event.altKey,
+              shiftKey: event.shiftKey,
+            } as KeyboardEvent)
+          : event,
+        shortcut,
+      );
+
     const entries: HotkeyEntry[] = [
       // F3 → editor find navigation
       {
@@ -105,7 +120,7 @@ export function useAppHotkeys() {
               !event.shiftKey
             );
           }
-          return matchShortcut(event, s);
+          return matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();
@@ -118,7 +133,7 @@ export function useAppHotkeys() {
         id: "open-search",
         match: (event) => {
           const s = appShortcutsRef.current.openSearch;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => !isEditableInput() && !isRichTextEditing(),
         handler: (event) => {
@@ -133,7 +148,7 @@ export function useAppHotkeys() {
         id: "toggle-ai-panel",
         match: (event) => {
           const s = appShortcutsRef.current.toggleAIPanel;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();
@@ -145,7 +160,7 @@ export function useAppHotkeys() {
         id: "toggle-sidebar",
         match: (event) => {
           const s = appShortcutsRef.current.toggleSidebar;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();
@@ -158,7 +173,7 @@ export function useAppHotkeys() {
         id: "editor-find-open",
         match: (event) => {
           const s = appShortcutsRef.current.editorFindOpen;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();
@@ -216,7 +231,7 @@ export function useAppHotkeys() {
         id: "save",
         match: (event) => {
           const s = appShortcutsRef.current.saveNote;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => !isEditableInput(),
         handler: (event) => {
@@ -237,7 +252,7 @@ export function useAppHotkeys() {
         id: "new-note",
         match: (event) => {
           const s = appShortcutsRef.current.newNote;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => !isEditableInput(),
         handler: (event) => {
@@ -269,7 +284,7 @@ export function useAppHotkeys() {
         id: "toggle-theme",
         match: (event) => {
           const s = appShortcutsRef.current.toggleTheme;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();
@@ -281,7 +296,7 @@ export function useAppHotkeys() {
         id: "nav-back",
         match: (event) => {
           const s = appShortcutsRef.current.navBack;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => {
           const hasOpenModal = () =>
@@ -299,7 +314,7 @@ export function useAppHotkeys() {
         id: "nav-forward",
         match: (event) => {
           const s = appShortcutsRef.current.navForward;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => {
           const hasOpenModal = () =>
@@ -318,7 +333,7 @@ export function useAppHotkeys() {
         id: "new-tab",
         match: (event) => {
           const s = appShortcutsRef.current.newTab;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => {
           const hasOpenModal = () =>
@@ -338,7 +353,7 @@ export function useAppHotkeys() {
         id: "unified-close",
         match: (event) =>
           !event.defaultPrevented &&
-          matchShortcut(event, closeTabShortcutRef.current),
+          matchesConfiguredShortcut(event, closeTabShortcutRef.current),
         when: (event) => {
           const target = event.target as HTMLElement | null;
           // Never intercept when inside the shortcut recorder input itself
@@ -450,7 +465,7 @@ export function useAppHotkeys() {
         match: (event) => {
           if (event.defaultPrevented) return false;
           const s = appShortcutsRef.current.reopenTab;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();

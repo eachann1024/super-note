@@ -21,6 +21,8 @@ interface NotebookAiChatsState {
 
   /** 清空指定笔记本的会话记录 */
   clearChat: (notebookId: string) => void;
+  /** 清空全部笔记本会话记录（数据重置/整包恢复使用） */
+  clearAllChats: () => void;
 }
 
 export const useNotebookAiChats = create<NotebookAiChatsState>()(
@@ -70,6 +72,7 @@ export const useNotebookAiChats = create<NotebookAiChatsState>()(
           return { chats: rest };
         });
       },
+      clearAllChats: () => set({ chats: {} }),
     }),
     {
       name: "goose-note-notebook-ai-chats",

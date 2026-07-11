@@ -28,6 +28,7 @@ export function isSlashMenuDivider(item: SlashMenuItem): boolean {
 export function getBlockNoteSlashMenuItems(
   editor: BlockNoteEditor<any, any, any>,
   aiEnabled: boolean,
+  useCustomAIProvider = true,
 ): SlashMenuItem[] {
   // 插入完成后：把光标移到新块、把视图滚动到新块、把焦点交回编辑器
   const focusAndScrollTo = (block: { id: string }) => {
@@ -147,8 +148,12 @@ export function getBlockNoteSlashMenuItems(
           });
         }
 
-        // xl-ai 接管：打开 BlockNote 官方 AI 菜单（uTools 模型暂不支持，
-        // 需在 设置 → AI 助手 中切到自定义 OpenAI/Claude）
+        if (!useCustomAIProvider) {
+          window.dispatchEvent(new CustomEvent("goose-note:open-ai-panel"));
+          return;
+        }
+
+        // 自定义 OpenAI / Claude 继续使用 BlockNote 的结构化编辑菜单。
         const ai = editor.getExtension(AIExtension);
         const blockId = editor.getTextCursorPosition().block.id;
         if (ai && blockId) {

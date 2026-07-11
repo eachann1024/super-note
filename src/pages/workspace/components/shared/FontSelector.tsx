@@ -1,4 +1,5 @@
 import type { Page } from "@/types";
+import { DEFAULT_FONT_NAMES } from "@/lib/fontLoader";
 
 interface FontSelectorProps {
   value: Page["fontFamily"];
@@ -6,9 +7,9 @@ interface FontSelectorProps {
 }
 
 const defaultFonts = [
-  { value: "default" as const, label: "默认", defaultFont: "PingFang SC" },
-  { value: "serif" as const, label: "衬线体", defaultFont: "Georgia" },
-  { value: "mono" as const, label: "等宽体", defaultFont: "JetBrains Mono" },
+  { value: "default" as const, label: "默认", defaultFont: DEFAULT_FONT_NAMES.default },
+  { value: "serif" as const, label: "衬线体", defaultFont: DEFAULT_FONT_NAMES.serif },
+  { value: "mono" as const, label: "等宽体", defaultFont: DEFAULT_FONT_NAMES.mono },
 ];
 
 export function FontSelector({ value, onChange }: FontSelectorProps) {

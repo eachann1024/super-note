@@ -1,6 +1,10 @@
 import { expect, test } from "playwright/test";
 import JSZip from "jszip";
-import { generateExportZip, importNotebooksFromZip } from "../../src/lib/export";
+import {
+  generateExportZip,
+  importNotebooksFromZip,
+  inspectNotebookImportZip,
+} from "../../src/lib/export";
 import type { Page } from "../../src/types";
 
 const notebookId = "notebook-export";
@@ -582,4 +586,44 @@ test("generateExportZip keeps same relative image names separate across local fo
     "C:/notes/a/assets/shared.png",
     "C:/notes/b/assets/shared.png",
   ]);
+});
+
+test("inspectNotebookImportZip accepts a valid metadata backup without mutating stores", async () => {
+  const zip = new JSZip();
+  zip.file(
+    "backup-metadata.json",
+    JSON.stringify({
+      version: 1,
+      notebooks: [{ id: "nb-1", name: "Note" }],
+      pages: [{ id: "page-1", workspaceId: "nb-1", content: [] }],
+      history: {},
+    }),
+  );
+
+  const result = await inspectNotebookImportZip(
+    await zip.generateAsync({ type: "blob" }),
+  );
+
+  expect(result).toEqual({
+    source: "metadata",
+    notebookCount: 1,
+    pageCount: 1,
+  });
+});
+
+test("inspectNotebookImportZip rejects damaged metadata before destructive restore", async () => {
+  const zip = new JSZip();
+  zip.file("backup-metadata.json", "{not-json");
+
+  await expect(
+    inspectNotebookImportZip(await zip.generateAsync({ type: "blob" })),
+  ).rejects.toThrow("备份元数据已损坏");
+});
+
+test("inspectNotebookImportZip rejects an empty zip before destructive restore", async () => {
+  const zip = new JSZip();
+
+  await expect(
+    inspectNotebookImportZip(await zip.generateAsync({ type: "blob" })),
+  ).rejects.toThrow("没有可恢复的鹅的笔记数据");
 });

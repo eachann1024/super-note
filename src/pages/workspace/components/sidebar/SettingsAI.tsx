@@ -82,6 +82,7 @@ export function SettingsAI({
   const [utoolsModels, setUToolsModels] = useState<AIModelOption[]>([]);
   const [loadingUToolsModels, setLoadingUToolsModels] = useState(false);
   const [utoolsLoadError, setUToolsLoadError] = useState<string | null>(null);
+  const [utoolsReloadNonce, setUToolsReloadNonce] = useState(0);
   const [customProtocol, setCustomProtocol] = useState<CustomAIProtocol>(ai.customProtocol);
   const [customOpenAIBaseURL, setCustomOpenAIBaseURL] = useState(ai.customOpenAIBaseURL);
   const [customClaudeBaseURL, setCustomClaudeBaseURL] = useState(ai.customClaudeBaseURL);
@@ -155,7 +156,7 @@ export function SettingsAI({
     return () => {
       active = false;
     };
-  }, [aiSupported, enabled, usingCustomProvider]);
+  }, [aiSupported, enabled, usingCustomProvider, utoolsReloadNonce]);
 
   useEffect(() => {
     if (!enabled || usingCustomProvider || loadingUToolsModels || utoolsLoadError || utoolsModels.length === 0) {
@@ -264,7 +265,7 @@ export function SettingsAI({
 
       <SettingsSectionCard
         title={<span className="flex items-center gap-2"><LucideIcons.Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />AI 开关</span>}
-        description="开启后页头出现 AI 入口，空白段落按空格也能唤起 AI 工具栏。"
+        description="开启后页头出现 AI 入口；空白段落按空格可唤起 AI。uTools 内置模型打开右侧面板，自定义模型打开编辑器工具栏。"
       >
         <div className={cn("flex items-center justify-between gap-4 p-4", SETTINGS_OPTION_ROW_CLASS)}>
           <div className="space-y-1.5">
@@ -431,7 +432,7 @@ export function SettingsAI({
 
       <SettingsSectionCard
         title={<span className="flex items-center gap-2"><LucideIcons.Brain className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />AI 模型</span>}
-        description="选一个默认模型，AI 功能都会用它来响应。"
+        description="选择全局默认模型；笔记本 AI 如设置了工作区模型，会优先使用工作区模型。"
         actions={
           usingCustomProvider ? (
             <Button
@@ -444,7 +445,15 @@ export function SettingsAI({
               重新获取模型
             </Button>
           ) : enabled && aiSupported ? (
-            <Button variant="secondary" size="sm" onClick={() => setSelectedModelId(null)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={loadingUToolsModels}
+              onClick={() => {
+                setSelectedModelId(null);
+                setUToolsReloadNonce((value) => value + 1);
+              }}
+            >
               刷新并重选
             </Button>
           ) : null

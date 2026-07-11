@@ -13,6 +13,8 @@ const MODIFIER_KEYS = new Set(["control", "ctrl", "meta", "alt", "shift"])
 const MODIFIER_ORDER = ["Ctrl", "Meta", "Alt", "Shift"]
 
 function normalizeShortcutKey(rawKey: string) {
+  if (rawKey === " ") return "Space"
+  if (rawKey === "+") return "Plus"
   const key = rawKey.trim().toLowerCase()
   if (!key) return ""
   if (key === "control" || key === "ctrl") return "Ctrl"
@@ -20,7 +22,6 @@ function normalizeShortcutKey(rawKey: string) {
   if (key === "alt" || key === "option") return "Alt"
   if (key === "shift") return "Shift"
   if (key === "escape" || key === "esc") return "Esc"
-  if (key === " ") return "Space"
   if (key.length === 1) return key.toUpperCase()
   return key.charAt(0).toUpperCase() + key.slice(1)
 }
@@ -62,11 +63,10 @@ export function getShortcutFromKeyEvent(event: ShortcutInputEvent) {
   const normalizedKey = normalizeShortcutKey(resolveMainKey(event))
   const isModifierKey = MODIFIER_KEYS.has(event.key.toLowerCase())
   const hasKey = normalizedKey && !isModifierKey
-  const tokens = hasKey ? [...baseModifiers, normalizedKey] : baseModifiers
+  if (!hasKey) return ""
+  const tokens = [...baseModifiers, normalizedKey]
   const ordered = MODIFIER_ORDER.filter((key) => tokens.includes(key))
-  if (hasKey) {
-    ordered.push(normalizedKey)
-  }
+  ordered.push(normalizedKey)
   return ordered.join("+")
 }
 
@@ -143,7 +143,8 @@ export function ShortcutField({
 
             event.preventDefault()
             event.stopPropagation()
-            onChange(getShortcutFromKeyEvent(event))
+            const shortcut = getShortcutFromKeyEvent(event)
+            if (shortcut) onChange(shortcut)
           }}
         />
         {resetValue !== undefined && (

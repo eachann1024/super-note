@@ -466,7 +466,8 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor(
     async (query: string) => {
       let items = getBlockNoteSlashMenuItems(
         editor,
-        aiSettingsRef.current.enabled,
+        aiSettingsRef.current.enabled && !pageRef.current?.localFilePath,
+        aiSettingsRef.current.useCustomProvider,
       );
       if (hiddenSlashItemTitles && hiddenSlashItemTitles.length > 0) {
         const hidden = new Set(hiddenSlashItemTitles);

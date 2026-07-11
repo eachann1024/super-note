@@ -163,7 +163,7 @@ const shortcutSections: ShortcutSection[] = [
         note: "默认值，可在设置中改成你顺手的组合键。",
       },
       {
-        shortcut: "Alt + 1...9 / 0",
+        shortcut: "Cmd/Ctrl + 1...9",
         action: "按位置切换标签页",
         note: "0 对应第 10 个标签页。",
       },
@@ -290,7 +290,7 @@ export const onboardingPageContent: BlockNoteContent = [
     [
       ["同时打开多页", "点开不同页面后会进入标签栏", "边写边查资料、对照多份内容"],
       ["关闭当前标签页", "默认 Alt + W，也可在设置中改", "快速清理临时页面"],
-      ["按位置切换标签页", "Alt + 1...9 / 0", "手不离键盘切换常用页"],
+      ["按位置切换标签页", "Cmd/Ctrl + 1...9", "手不离键盘切换常用页"],
     ],
   ),
   heading(2, "搜索与查找"),

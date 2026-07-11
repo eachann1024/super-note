@@ -248,7 +248,7 @@ export function PageHeader({
     syncNotebookForPage(pageId);
     setExpandPageId(pageId);
   };
-  const { closeTabShortcut } = useSettings();
+  const { closeTabShortcut, appShortcuts } = useSettings();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -275,11 +275,17 @@ export function PageHeader({
   const closeTabShortcutLabel = closeTabShortcut
     ? formatShortcut(closeTabShortcut)
     : "未设置";
-  const searchShortcuts = `${formatShortcut("Mod+K")} / ${formatShortcut("Mod+P")}`;
+  const searchShortcuts = appShortcuts.openSearch
+    ? formatShortcut(appShortcuts.openSearch)
+    : "未设置";
   const sidebarCollapsed = useSidebarView((s) => s.sidebarCollapsed);
   const toggleSidebarCollapsed = useSidebarView((s) => s.toggleSidebarCollapsed);
-  const toggleSidebarShortcutLabel = formatShortcut("Alt+B");
-  const toggleAiPanelShortcutLabel = formatShortcut("Mod+J");
+  const toggleSidebarShortcutLabel = appShortcuts.toggleSidebar
+    ? formatShortcut(appShortcuts.toggleSidebar)
+    : "未设置";
+  const toggleAiPanelShortcutLabel = appShortcuts.toggleAIPanel
+    ? formatShortcut(appShortcuts.toggleAIPanel)
+    : "未设置";
   const prevSidebarCollapsedRef = useRef(sidebarCollapsed);
   const [sidebarExpandAttention, setSidebarExpandAttention] = useState(false);
 

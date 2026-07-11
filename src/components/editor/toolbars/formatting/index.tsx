@@ -139,10 +139,8 @@ export function EditorFormattingToolbar() {
         return;
       }
       if (!aiSettings.useCustomProvider) {
-        // 平台原生 AI（uTools 内置）不支持 BlockNote xl-ai 菜单（需要标准 OpenAI/Claude 协议）。
-        toast.error(
-          "uTools 内置模型暂不支持编辑器内 AI 菜单，请在 设置 → AI 助手 中切换到自定义 OpenAI 或 Claude provider。",
-        );
+        window.dispatchEvent(new CustomEvent("goose-note:open-ai-panel"));
+        toast.info("uTools 内置模型使用右侧笔记本 AI 面板；已为你打开，可直接输入处理要求。");
         return;
       }
       const apiKey = (

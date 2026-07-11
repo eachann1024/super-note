@@ -245,21 +245,10 @@
   margin-bottom: 0.6em;
 }
 
-.workspace-editor-surface.goose-table-even-column-width
-  .bn-block-outer:has(.bn-block-content[data-content-type="table"]),
-.workspace-editor-surface.goose-table-even-column-width
-  .bn-block-outer:has(.bn-block-content[data-content-type="table"])
-  > .bn-block,
-.workspace-editor-surface.goose-table-even-column-width
-  .bn-block-outer:has(.bn-block-content[data-content-type="table"])
-  > .bn-block
-  > .bn-block-content[data-content-type="table"] {
-  width: 100%;
-  max-width: 100%;
-}
-
+/* BlockNote 自身已让 block/content/tableWrapper 占满父级；这里只覆盖 table 的 auto 宽度。
+   避免 tableEvenColumnWidth 的核心行为依赖旧 Chromium 不支持的 :has()。 */
 .workspace-editor-surface.goose-table-even-column-width .bn-editor [data-content-type="table"] table {
-  width: 100%;
+  width: 100% !important;
   table-layout: fixed;
 }
 

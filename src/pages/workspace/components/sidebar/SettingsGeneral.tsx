@@ -220,11 +220,11 @@ export function SettingsGeneral({
             <div className="flex items-center gap-3">
               <LucideIcons.Plug2 className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
               <Label htmlFor="open-in-utools" className="cursor-pointer">
-                使用 uTools 打开搜索结果
+                使用 uTools 打开链接
               </Label>
             </div>
             <p className="mt-1 pl-7 text-xs text-muted-foreground">
-              开启后搜索结果链接在 uTools 内置浏览器里打开；关闭则用系统浏览器。
+              开启后，搜索结果和笔记中的网页链接会在 uTools 内置浏览器里打开；关闭则用系统浏览器。
             </p>
           </div>
           <Switch

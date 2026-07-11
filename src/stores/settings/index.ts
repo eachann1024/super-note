@@ -5,6 +5,7 @@ import { uToolsStorage } from '@/lib/storage'
 import type { Theme, CodeStyle, AISettings, UToolsSettings, DesktopSettings } from './types'
 import {
     normalizeCodeStyle,
+    resolveCodeTheme,
     normalizeUIFontSize,
     normalizeAutoCloseInactiveTabsHours,
     normalizeAISettings,
@@ -69,31 +70,7 @@ async function applyNativeWindowTheme(theme: Theme, isDark: boolean) {
 function applyCodeStyle(codeStyle: CodeStyle) {
     const root = document.documentElement
     const isDark = root.classList.contains('dark')
-
-    let finalClass: string
-
-    switch (codeStyle) {
-        case 'default':
-            finalClass = isDark ? 'github-dark' : 'github-light'
-            break
-        case 'github':
-            finalClass = isDark ? 'github-dark' : 'github-light'
-            break
-        case 'modern':
-            finalClass = isDark ? 'one-dark' : 'one-light'
-            break
-        case 'night':
-            finalClass = isDark ? 'tokyo-night' : 'github-light-mod'
-            break
-        case 'nord':
-            finalClass = isDark ? 'nord' : 'nord-light'
-            break
-        case 'nord-light':
-            finalClass = isDark ? 'nord' : 'nord-light'
-            break
-        default:
-            finalClass = isDark ? 'github-dark' : 'github-light'
-    }
+    const finalClass = resolveCodeTheme(codeStyle, isDark)
 
     if (finalClass) {
         root.setAttribute('data-code-theme', finalClass)
@@ -336,13 +313,18 @@ export const useSettings = create<SettingsState>()(
 // 监听系统主题变化
 if (typeof window !== 'undefined') {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    mediaQuery.addEventListener('change', () => {
+    const handleSystemThemeChange = () => {
         const { theme, codeStyle } = useSettings.getState()
         if (theme === 'system') {
             applyTheme('system')
         }
         applyCodeStyle(codeStyle)
-    })
+    }
+    if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', handleSystemThemeChange)
+    } else {
+        mediaQuery.addListener(handleSystemThemeChange)
+    }
 
     // 立即初始化主题（确保在 DOM 加载后立即应用）
     const initThemes = () => {

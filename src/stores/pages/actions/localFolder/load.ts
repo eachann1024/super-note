@@ -6,6 +6,7 @@ import {
   scanLocalFolderPages,
   parseLocalMarkdownContent,
   localFileTitleFromPath,
+  shouldIgnoreLocalRelativePath,
 } from "@/lib/local-folder-scanner";
 import {
   setLocalMdSnapshot,
@@ -197,7 +198,13 @@ export const loadLocalFolderPagesAction = async (
           const notebook = useNotebooks.getState().notebooks[notebookId];
           const isLocalFolder = notebook?.source === "local-folder";
 
-          if (!isLocalFolder) {
+          if (isLocalFolder) {
+            // 隐藏目录设置变化后，当前页可能已不在重扫结果里；不能保留悬空 activePageId。
+            if (nextActivePageId && !updated[nextActivePageId]) {
+              result.activePageId = null;
+              result.expandPageId = null;
+            }
+          } else {
             const lastActivePageId = useNotebooks
               .getState()
               .getLastActivePage(notebookId);
@@ -337,6 +344,14 @@ export const addSingleLocalPageAction = async (
 
   const fallbackTitle = localFileTitleFromPath(filePath);
   const relativePath = toRelativePath(basePath, filePath);
+  if (
+    shouldIgnoreLocalRelativePath(
+      relativePath,
+      useSettings.getState().localFolderHiddenFolders,
+    )
+  ) {
+    return;
+  }
   const idMap = readLocalPageIdMap(notebookId);
   const { id: pageId, dirty } = resolveOrCreateStableId(
     notebookId,

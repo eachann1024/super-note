@@ -44,4 +44,14 @@ export const historyRepository = {
     versions.forEach((doc) => UToolsAdapter.db.remove(doc._id));
     UToolsAdapter.db.remove(indexKey(pageId));
   },
+
+  /** 清理内部页面历史；本地文件夹的 .goose/history 不在该数据库中，不受影响。 */
+  clearAll(): void {
+    UToolsAdapter.db
+      .allDocs<HistoryVersion>(VERSION_PREFIX)
+      .forEach((doc) => UToolsAdapter.db.remove(doc._id));
+    UToolsAdapter.db
+      .allDocs<HistoryIndex>(INDEX_PREFIX)
+      .forEach((doc) => UToolsAdapter.db.remove(doc._id));
+  },
 };

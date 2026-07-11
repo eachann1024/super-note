@@ -262,15 +262,41 @@ export function buildNotebookAgent(
   notebookId: string,
   currentPageId?: string | null,
 ): BuildAgentResult {
-  const modelResult: ModelAvailability = buildLanguageModel();
-  if (!modelResult.ok) {
-    return { ok: false, reason: modelResult.reason };
-  }
-
   const agentContext: NotebookAiAgentContext = {
     notebookId,
     currentPageId: currentPageId ?? getCurrentNotebookAiPageId(notebookId),
   };
+  const modelResult: ModelAvailability = buildLanguageModel({
+    executeTool: async ({ toolName, input, toolCallId, signal }) => {
+      const selectedTool = notebookAiTools[toolName as keyof typeof notebookAiTools];
+      const execute = selectedTool?.execute;
+      if (typeof execute !== "function") {
+        throw new Error(`AI 请求了未知工具：${toolName}`);
+      }
+
+      const output = execute(input as never, {
+        toolCallId,
+        messages: [],
+        abortSignal: signal,
+        experimental_context: agentContext,
+      });
+      if (
+        output &&
+        typeof output === "object" &&
+        Symbol.asyncIterator in output
+      ) {
+        let lastValue: unknown = null;
+        for await (const value of output as AsyncIterable<unknown>) {
+          lastValue = value;
+        }
+        return lastValue;
+      }
+      return await output;
+    },
+  });
+  if (!modelResult.ok) {
+    return { ok: false, reason: modelResult.reason };
+  }
 
   const agent = new ToolLoopAgent({
     model: modelResult.model,

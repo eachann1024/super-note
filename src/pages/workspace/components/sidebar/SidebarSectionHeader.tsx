@@ -17,8 +17,13 @@ export function SidebarSectionHeader({
   onSwitchToPages,
   onSwitchToOutline,
 }: SidebarSectionHeaderProps) {
-  const searchShortcut = formatShortcut("Mod+K");
-  const createShortcut = formatShortcut("Mod+N");
+  const appShortcuts = useSettings((state) => state.appShortcuts);
+  const searchShortcut = appShortcuts.openSearch
+    ? formatShortcut(appShortcuts.openSearch)
+    : "未设置";
+  const createShortcut = appShortcuts.newNote
+    ? formatShortcut(appShortcuts.newNote)
+    : "未设置";
 
   return (
     <div className="group flex items-center justify-between pl-0 pr-[9px] py-1.5 text-xs font-medium text-[hsl(var(--goose-nav-title))] dark:text-[hsl(var(--goose-nav-title))]">

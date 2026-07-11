@@ -72,6 +72,7 @@ export function WorkspaceLayout({
   const aiEnabled = useSettings((s) => s.ai.enabled);
   const {
     isOpen: aiPanelOpen,
+    open: openAiPanel,
     toggle: toggleAiPanel,
     close: closeAiPanel,
   } = useNotebookAiPanel();
@@ -125,6 +126,17 @@ export function WorkspaceLayout({
     return () =>
       window.removeEventListener("goose-note:toggle-ai-panel", onToggle);
   }, [aiAvailableForNotebook, toggleAiPanel]);
+
+  // 编辑器内的 Space / 斜杠菜单 / 选区 AI 在 uTools 原生模型模式下共用此入口。
+  // 使用 open 而非 toggle，重复触发不会把已经打开的面板关掉。
+  useEffect(() => {
+    const onOpen = () => {
+      if (!aiAvailableForNotebook) return;
+      openAiPanel();
+    };
+    window.addEventListener("goose-note:open-ai-panel", onOpen);
+    return () => window.removeEventListener("goose-note:open-ai-panel", onOpen);
+  }, [aiAvailableForNotebook, openAiPanel]);
 
   // AI 功能不可用时强制收起侧栏面板，避免 localStorage 仍为 true 导致下次误展开
   useEffect(() => {

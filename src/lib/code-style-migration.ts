@@ -6,8 +6,6 @@ const MIGRATION_MARK_KEY = "goose-note:code-style-migration:2026-hot-pack:v1";
 
 const LEGACY_CODE_STYLE_MAP: Record<string, CodeStyle> = {
   default: "github",
-  nord: "night",
-  "nord-light": "night",
 };
 
 const KNOWN_CODE_STYLE_SET = new Set<CodeStyle>([
@@ -15,6 +13,7 @@ const KNOWN_CODE_STYLE_SET = new Set<CodeStyle>([
   "github",
   "modern",
   "night",
+  "dracula",
   "nord",
   "nord-light",
 ]);

@@ -49,6 +49,7 @@ interface TabsState {
   reopenLastClosedTab: () => void;
   reconcileTabs: () => void;
   closeExpiredTabs: (now?: number) => void;
+  clearAllTabs: () => void;
 }
 
 const createTabId = (pageId: string) =>
@@ -767,6 +768,17 @@ export const useTabs = create<TabsState>()((set, get) => {
 
       expiredTabs.forEach((tab) => {
         get().closeTab(tab.id);
+      });
+    },
+
+    clearAllTabs: () => {
+      set({
+        openTabs: [],
+        activeTabId: null,
+        tabHistory: [],
+        tabHistoryIndex: -1,
+        isHistoryNavigating: false,
+        recentlyClosedPageIds: [],
       });
     },
 

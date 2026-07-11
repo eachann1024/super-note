@@ -38,6 +38,7 @@ declare global {
   const DEFAULT_APP_SHORTCUTS: typeof import('./stores/settings/index').DEFAULT_APP_SHORTCUTS
   const DEFAULT_CLAUDE_BASE_URL: typeof import('./lib/ai-provider/index').DEFAULT_CLAUDE_BASE_URL
   const DEFAULT_CLOSE_TAB_SHORTCUT: typeof import('./stores/settings/index').DEFAULT_CLOSE_TAB_SHORTCUT
+  const DEFAULT_FONT_NAMES: typeof import('./lib/fontLoader').DEFAULT_FONT_NAMES
   const DEFAULT_NOTEBOOK: typeof import('./stores/useNotebooks').DEFAULT_NOTEBOOK
   const DEFAULT_OPENAI_BASE_URL: typeof import('./lib/ai-provider/index').DEFAULT_OPENAI_BASE_URL
   const DEFAULT_SEARCH_HOTKEY: typeof import('./stores/settings/index').DEFAULT_SEARCH_HOTKEY
@@ -163,6 +164,7 @@ declare global {
   const buttonVariants: typeof import('./components/ui/button').buttonVariants
   const cache: typeof import('react').cache
   const cacheSignal: typeof import('react').cacheSignal
+  const clearAllLocalMdSnapshots: typeof import('./lib/local-md-snapshot').clearAllLocalMdSnapshots
   const clearLocalPageMetadataCache: typeof import('./stores/pages/index').clearLocalPageMetadataCache
   const clipboardHasPasteableImage: typeof import('./components/editor/utils/pasteClipboardImage').clipboardHasPasteableImage
   const clonePageContent: typeof import('./components/editor/utils/blocknote-content/index').clonePageContent
@@ -257,6 +259,7 @@ declare global {
   const importMarkdownFragment: typeof import('./lib/export/index').importMarkdownFragment
   const importNotebooksFromZip: typeof import('./lib/export/index').importNotebooksFromZip
   const inlineToTextRuns: typeof import('./lib/docxExport/docxStyles').inlineToTextRuns
+  const inspectNotebookImportZip: typeof import('./lib/export/index').inspectNotebookImportZip
   const isBackupFileName: typeof import('./lib/webdavSync').isBackupFileName
   const isBlockNoteContent: typeof import('./components/editor/utils/blocknote-content/index').isBlockNoteContent
   const isBottomEditorBlankClick: typeof import('./components/editor/utils/selection').isBottomEditorBlankClick
@@ -319,6 +322,7 @@ declare global {
   const readPersistentDismissState: typeof import('./lib/dismiss-state').readPersistentDismissState
   const reconcileSlashSuggestionMenu: typeof import('./components/editor/utils/slashMenuPolicy').reconcileSlashSuggestionMenu
   const removeDbStorageItem: typeof import('./lib/storage').removeDbStorageItem
+  const removeLocalPageIdMap: typeof import('./lib/local-page-idmap').removeLocalPageIdMap
   const renderExportHtml: typeof import('./lib/export/index').renderExportHtml
   const resolveAiTargetFromSelection: typeof import('./lib/ai-write/index').resolveAiTargetFromSelection
   const resolveAiTargetIntent: typeof import('./lib/ai-write/index').resolveAiTargetIntent
@@ -328,6 +332,7 @@ declare global {
   const resolveImageToBuffer: typeof import('./lib/docxExport/docxImages').resolveImageToBuffer
   const resolveNotebookLandingPageId: typeof import('./lib/notebookNavigation').resolveNotebookLandingPageId
   const resolveOrCreateStableId: typeof import('./lib/local-page-idmap').resolveOrCreateStableId
+  const resolveTheme: typeof import('./hooks/useResolvedTheme').resolveTheme
   const resolvedTargetToSelection: typeof import('./lib/ai-write/index').resolvedTargetToSelection
   const restorePageWithToast: typeof import('./lib/page-delete-actions').restorePageWithToast
   const runAIText: typeof import('./lib/ai-provider/index').runAIText
@@ -336,6 +341,7 @@ declare global {
   const sanitizeFileName: typeof import('./lib/fileStorage').sanitizeFileName
   const sanitizeFilenameSegment: typeof import('./lib/local-title-binding').sanitizeFilenameSegment
   const saveBlobAndReveal: typeof import('./lib/export/index').saveBlobAndReveal
+  const saveBlobWithPrompt: typeof import('./lib/export/index').saveBlobWithPrompt
   const scanLocalFolderPages: typeof import('./lib/local-folder-scanner').scanLocalFolderPages
   const selectExpandedIds: typeof import('./stores/useSidebarView').selectExpandedIds
   const selectFavoritesCollapsed: typeof import('./stores/useSidebarView').selectFavoritesCollapsed
@@ -345,6 +351,7 @@ declare global {
   const setLocalMdSnapshot: typeof import('./lib/local-md-snapshot').setLocalMdSnapshot
   const shortcutHasModifier: typeof import('./lib/shortcut-match').shortcutHasModifier
   const shouldIgnoreEntry: typeof import('./lib/local-folder-scanner').shouldIgnoreEntry
+  const shouldIgnoreLocalRelativePath: typeof import('./lib/local-folder-scanner').shouldIgnoreLocalRelativePath
   const shouldOpenSlashSuggestionMenu: typeof import('./components/editor/utils/slashMenuPolicy').shouldOpenSlashSuggestionMenu
   const shouldPreferVisibleSelectionText: typeof import('./components/editor/utils/clipboard').shouldPreferVisibleSelectionText
   const shouldSuppressSidebarSelect: typeof import('./lib/sidebarPageNavigation').shouldSuppressSidebarSelect
@@ -401,6 +408,7 @@ declare global {
   const useQuickNote: typeof import('./stores/useQuickNote').useQuickNote
   const useReducer: typeof import('react').useReducer
   const useRef: typeof import('react').useRef
+  const useResolvedTheme: typeof import('./hooks/useResolvedTheme').useResolvedTheme
   const useSettings: typeof import('./stores/settings/index').useSettings
   const useSidebarView: typeof import('./stores/useSidebarView').useSidebarView
   const useState: typeof import('react').useState
@@ -416,6 +424,9 @@ declare global {
 }
 // for type re-export
 declare global {
+  // @ts-ignore
+  export type { ResolvedTheme } from './hooks/useResolvedTheme'
+  import('./hooks/useResolvedTheme')
   // @ts-ignore
   export type { AiActivityPhase } from './stores/useAiStatus'
   import('./stores/useAiStatus')

@@ -2,6 +2,8 @@
  * showChart 工具的输出渲染卡片（echarts，懒初始化，跟随明暗主题）
  */
 import { useEffect, useRef, useId } from "react";
+import { useSettings } from "@/stores/useSettings";
+import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 
 interface ChartSeries {
   name: string;
@@ -13,11 +15,6 @@ interface ChartCardProps {
   title?: string;
   categories?: string[];
   series: ChartSeries[];
-}
-
-function isDark() {
-  const root = document.documentElement;
-  return root.classList.contains("dark") || root.dataset.theme === "dark";
 }
 
 function buildOption(
@@ -97,6 +94,8 @@ function buildOption(
 }
 
 export function ChartCard(props: ChartCardProps) {
+  const theme = useSettings((state) => state.theme);
+  const resolvedTheme = useResolvedTheme(theme);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<unknown>(null);
   const uid = useId();
@@ -107,10 +106,9 @@ export function ChartCard(props: ChartCardProps) {
     const init = async () => {
       if (!containerRef.current) return;
       const echarts = await import("echarts");
-      const dark = isDark();
       chart = echarts.init(containerRef.current, undefined, { renderer: "svg" });
       chartRef.current = chart;
-      chart.setOption(buildOption(props, dark));
+      chart.setOption(buildOption(props, resolvedTheme === "dark"));
     };
 
     void init();
@@ -132,8 +130,8 @@ export function ChartCard(props: ChartCardProps) {
   useEffect(() => {
     if (!chartRef.current) return;
     const c = chartRef.current as { setOption: (o: unknown) => void };
-    c.setOption(buildOption(props, isDark()));
-  });
+    c.setOption(buildOption(props, resolvedTheme === "dark"));
+  }, [props, resolvedTheme]);
 
   return (
     <div className="my-2 overflow-hidden rounded-[8px] border border-border">

@@ -49,3 +49,27 @@ test("shortcutHasModifier distinguishes modified shortcuts from text keys", () =
   expect(shortcutHasModifier("Alt+W")).toBe(true);
   expect(shortcutHasModifier("W")).toBe(false);
 });
+
+test("modifier-only legacy shortcuts never intercept a bare modifier key", () => {
+  expect(
+    matchShortcut(
+      keyboardEvent({ key: "Meta", code: "MetaLeft", metaKey: true }),
+      "Meta",
+    ),
+  ).toBe(false);
+  expect(
+    matchShortcut(
+      keyboardEvent({ key: "Control", code: "ControlLeft", ctrlKey: true }),
+      "Ctrl",
+    ),
+  ).toBe(false);
+});
+
+test("recorded plus shortcuts can be matched", () => {
+  expect(
+    matchShortcut(
+      keyboardEvent({ key: "+", code: "Equal", shiftKey: true }),
+      "Shift+Plus",
+    ),
+  ).toBe(true);
+});

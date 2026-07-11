@@ -3,6 +3,8 @@ import type { EditorRef } from "@/components/editor/core/Editor";
 import { renderMermaidSvgForExport } from "@/lib/imageExport/mermaid";
 import { ArtifactActions } from "./ArtifactActions";
 import { createMermaidArtifactBlocks, insertArtifactBlocks } from "./insertArtifact";
+import { useSettings } from "@/stores/useSettings";
+import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 
 interface DiagramCardProps {
   title?: string;
@@ -10,12 +12,9 @@ interface DiagramCardProps {
   editorRef?: RefObject<EditorRef | null>;
 }
 
-function isDark() {
-  const root = document.documentElement;
-  return root.classList.contains("dark") || root.dataset.theme === "dark";
-}
-
 export function DiagramCard({ title, source, editorRef }: DiagramCardProps) {
+  const theme = useSettings((state) => state.theme);
+  const resolvedTheme = useResolvedTheme(theme);
   const [svg, setSvg] = useState("");
   const [failed, setFailed] = useState(false);
 
@@ -25,7 +24,7 @@ export function DiagramCard({ title, source, editorRef }: DiagramCardProps) {
     const render = async () => {
       setFailed(false);
       try {
-        const nextSvg = await renderMermaidSvgForExport(source, isDark() ? "dark" : "light");
+        const nextSvg = await renderMermaidSvgForExport(source, resolvedTheme);
         if (active) setSvg(nextSvg);
       } catch {
         if (active) {
@@ -39,7 +38,7 @@ export function DiagramCard({ title, source, editorRef }: DiagramCardProps) {
     return () => {
       active = false;
     };
-  }, [source]);
+  }, [resolvedTheme, source]);
 
   return (
     <div className="group relative my-2 overflow-hidden rounded-[8px] border border-border bg-background">
