@@ -68,7 +68,6 @@ import { gooseCalloutKeyboardExtension } from "@/components/editor/extensions/ca
 import { gooseFirstTitleEnterExtension } from "@/components/editor/extensions/firstTitleEnterExtension";
 import { gooseCollapsedToggleEnterExtension } from "@/components/editor/extensions/collapsedToggleEnterExtension";
 import { gooseToggleHeadingAutoCollectExtension } from "@/components/editor/extensions/toggleHeadingAutoCollectExtension";
-import { gooseEnterKeyBehaviorExtension } from "@/components/editor/extensions/gooseEnterKeyBehaviorExtension";
 import { gooseCrossBlockDeleteExtension } from "@/components/editor/extensions/crossBlockDeleteExtension";
 import { gooseEmptyBlockBackspaceExtension } from "@/components/editor/extensions/emptyBlockBackspaceExtension";
 import { createGooseFirstTitleGuardExtension } from "@/components/editor/inputrules/firstTitleGuard";
@@ -130,7 +129,6 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor(
     customActions,
     tableEvenColumnWidth,
     ai: aiSettings,
-    enterKeyBehavior,
     utools,
   } = settings;
   const {
@@ -229,14 +227,6 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor(
       initialContentRef.current,
     );
   }
-  // 同步 enterKeyBehavior 到 window.gooseEnterKeyBehavior 以便 keyboard extension 可以检测到变化
-  useEffect(() => {
-    interface GooseWindow extends Window {
-      gooseEnterKeyBehavior?: "create-block" | "save-exit";
-    }
-    const gooseWindow = window as unknown as GooseWindow;
-    gooseWindow.gooseEnterKeyBehavior = enterKeyBehavior;
-  }, [enterKeyBehavior]);
   const editor = useCreateBlockNote(
     {
       initialContent: initialContentRef.current as any,
@@ -272,7 +262,6 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor(
           isLocalFolderPageRef,
           editorInstanceRef,
         ),
-        gooseEnterKeyBehaviorExtension,
         gooseQuoteInputRuleExtension,
         gooseMarkdownInputRulesExtension,
         gooseFakeSelectionExtension,
@@ -366,16 +355,31 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor(
   );
   editorInstanceRef.current = editor;
 
+  const readCurrentEditorContent = useCallback(() => {
+    const rawContent = clonePageContent(editor.document as BlockNoteContent);
+    const isLocalPage =
+      Boolean(pageRef.current?.localFilePath) ||
+      pageRef.current?.id === "__quicknote_draft__";
+    const content = isLocalPage ? rawContent : normalizePageContent(rawContent);
+    return {
+      content,
+      signature: getCachedContentSignature(content),
+    };
+  }, [editor]);
+
   const debouncedUpdate = useMemo(() => {
     return createDebounce(
-      (_id: string, content: BlockNoteContent) => {
-        syncedContentSignatureRef.current = getCachedContentSignature(content);
+      (targetPageId: string) => {
+        if (targetPageId !== pageIdForUpdateRef.current) return;
+        const { content, signature } = readCurrentEditorContent();
+        if (signature === syncedContentSignatureRef.current) return;
+        syncedContentSignatureRef.current = signature;
         onContentChangeRef.current(content);
       },
       800,
       { maxWait: 3000 },
     );
-  }, []);
+  }, [readCurrentEditorContent]);
 
   const prevPageIdRef = useRef<string | null>(activePageId);
   useEffect(() => {
@@ -462,7 +466,8 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor(
     async (query: string) => {
       let items = getBlockNoteSlashMenuItems(
         editor,
-        aiSettingsRef.current.enabled,
+        aiSettingsRef.current.enabled && !pageRef.current?.localFilePath,
+        aiSettingsRef.current.useCustomProvider,
       );
       if (hiddenSlashItemTitles && hiddenSlashItemTitles.length > 0) {
         const hidden = new Set(hiddenSlashItemTitles);
@@ -682,18 +687,14 @@ export const Editor = forwardRef<EditorRef, EditorProps>(function Editor(
     (targetPageId?: string) => {
       const safePageId = targetPageId ?? pageIdForUpdateRef.current;
       if (!safePageId) return;
-      // local-folder 页面不走 normalizePageContent（避免 ensureFirstTitleHeading）
-      const rawContent = clonePageContent(editor.document as BlockNoteContent);
-      const nextContent = shouldUseRawEditorContent(pageRef.current)
-        ? rawContent
-        : normalizePageContent(rawContent);
       debouncedUpdate.cancel();
-      const nextSig = getCachedContentSignature(nextContent);
-      if (nextSig === syncedContentSignatureRef.current) return;
-      syncedContentSignatureRef.current = nextSig;
-      onContentChangeRef.current(nextContent);
+      if (safePageId !== pageIdForUpdateRef.current) return;
+      const { content, signature } = readCurrentEditorContent();
+      if (signature === syncedContentSignatureRef.current) return;
+      syncedContentSignatureRef.current = signature;
+      onContentChangeRef.current(content);
     },
-    [debouncedUpdate, editor],
+    [debouncedUpdate, readCurrentEditorContent],
   );
 
   useEffect(() => {

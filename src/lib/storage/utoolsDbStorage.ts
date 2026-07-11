@@ -1,7 +1,7 @@
 import type { StateStorage } from "zustand/middleware";
 import { UToolsAdapter } from "../utools";
 
-const FALLBACK_DOC_PREFIX = "gn:storage:";
+const STORAGE_DOC_PREFIX = "gn:storage:";
 
 interface PersistedStorageDoc {
   value: string;
@@ -14,7 +14,7 @@ type RawDbStorage = {
   removeItem: (key: string) => void;
 };
 
-const getFallbackDocId = (name: string) => `${FALLBACK_DOC_PREFIX}${name}`;
+const getStorageDocId = (name: string) => `${STORAGE_DOC_PREFIX}${name}`;
 
 const getRawDbStorage = (): RawDbStorage | null => {
   if (typeof window === "undefined") return null;
@@ -56,13 +56,15 @@ const readLocalStorageValue = (name: string): string | null => {
   }
 };
 
-const writeLocalStorageValue = (name: string, value: string): void => {
-  if (!isWebStorageAvailable()) return;
+const writeLocalStorageValue = (name: string, value: string): boolean => {
+  if (!isWebStorageAvailable()) return false;
 
   try {
     window.localStorage.setItem(name, value);
+    return true;
   } catch (error) {
     console.error("[uToolsDbStorage] localStorage setItem failed", name, error);
+    return false;
   }
 };
 
@@ -80,8 +82,8 @@ const deleteLocalStorageValue = (name: string): void => {
   }
 };
 
-const putFallbackDoc = (name: string, value: string): void => {
-  const id = getFallbackDocId(name);
+const putStorageDoc = (name: string, value: string): boolean => {
+  const id = getStorageDocId(name);
   const current = UToolsAdapter.db.get<PersistedStorageDoc>(id);
   const result = UToolsAdapter.db.put<PersistedStorageDoc>(
     id,
@@ -92,7 +94,7 @@ const putFallbackDoc = (name: string, value: string): void => {
     current?._rev,
   );
 
-  if (result.ok !== false) return;
+  if (result.ok !== false) return true;
 
   const latest = UToolsAdapter.db.get<PersistedStorageDoc>(id);
   const retry = UToolsAdapter.db.put<PersistedStorageDoc>(
@@ -105,25 +107,28 @@ const putFallbackDoc = (name: string, value: string): void => {
   );
 
   if (retry.ok === false) {
-    console.error("[uToolsDbStorage] fallback doc put failed", name, retry.error);
+    console.error("[uToolsDbStorage] storage doc put failed", name, retry.error);
+    return false;
   }
+
+  return true;
 };
 
-const removeFallbackDoc = (name: string): void => {
-  const id = getFallbackDocId(name);
+const removeStorageDoc = (name: string): void => {
+  const id = getStorageDocId(name);
   const current = UToolsAdapter.db.get(id);
   if (!current) return;
 
   const result = UToolsAdapter.db.remove(id);
   if (result.ok === false) {
-    console.error("[uToolsDbStorage] fallback doc remove failed", name, result.error);
+    console.error("[uToolsDbStorage] storage doc remove failed", name, result.error);
   }
 };
 
-const readFallbackValue = (name: string): string | null => {
+const readCanonicalValue = (name: string): string | null => {
   if (UToolsAdapter.isUTools) {
     const doc = UToolsAdapter.db.get<PersistedStorageDoc | string>(
-      getFallbackDocId(name),
+      getStorageDocId(name),
     );
     const data = doc?.data;
 
@@ -142,18 +147,17 @@ const readFallbackValue = (name: string): string | null => {
   return readLocalStorageValue(name);
 };
 
-const writeFallbackValue = (name: string, value: string): void => {
+const writeCanonicalValue = (name: string, value: string): boolean => {
   if (UToolsAdapter.isUTools) {
-    putFallbackDoc(name, value);
-    return;
+    return putStorageDoc(name, value);
   }
 
-  writeLocalStorageValue(name, value);
+  return writeLocalStorageValue(name, value);
 };
 
-const deleteFallbackValue = (name: string): void => {
+const deleteCanonicalValue = (name: string): void => {
   if (UToolsAdapter.isUTools) {
-    removeFallbackDoc(name);
+    removeStorageDoc(name);
     return;
   }
 
@@ -198,26 +202,29 @@ const deletePrimaryValue = (name: string): void => {
 };
 
 const readStorageValue = (name: string): string | null => {
-  const fallbackValue = readFallbackValue(name);
-  if (fallbackValue !== null) return fallbackValue;
+  const canonicalValue = readCanonicalValue(name);
+  if (canonicalValue !== null) return canonicalValue;
 
-  const primaryValue = readPrimaryValue(name);
-  if (primaryValue !== null) {
-    writeFallbackValue(name, primaryValue);
-    return primaryValue;
+  const legacyDbStorageValue = readPrimaryValue(name);
+  if (legacyDbStorageValue !== null) {
+    if (writeCanonicalValue(name, legacyDbStorageValue)) {
+      deletePrimaryValue(name);
+    }
+    return legacyDbStorageValue;
   }
 
   return null;
 };
 
 const writeStorageValue = (name: string, value: string): void => {
-  writeFallbackValue(name, value);
-  writePrimaryValue(name, value);
+  if (writeCanonicalValue(name, value)) {
+    deletePrimaryValue(name);
+  }
 };
 
 const deleteStorageValue = (name: string): void => {
+  deleteCanonicalValue(name);
   deletePrimaryValue(name);
-  deleteFallbackValue(name);
 };
 
 export const uToolsStorage: StateStorage = {

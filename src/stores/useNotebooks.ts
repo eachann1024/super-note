@@ -82,7 +82,12 @@ export const useNotebooks = create<NotebooksState>()(
       lastActivePageByNotebook: {},
       localFolderLoadStates: {},
 
-      createNotebook: (name = "Note", icon = "BookOpen", overrideIfExists = false, customId?: string) => {
+      createNotebook: (
+        name = "Note",
+        icon = "BookOpen",
+        overrideIfExists = false,
+        customId?: string,
+      ) => {
         const dupNotebook = overrideIfExists
           ? Object.values(get().notebooks).find(
               (n) => (customId && n.id === customId) || n.name === name,
@@ -127,9 +132,12 @@ export const useNotebooks = create<NotebooksState>()(
             persistPageSnapshots(nextPages, changedIds);
           }
 
-          const { [dupNotebook.id]: _, ...remainingNotebooks } = get().notebooks;
-          const { [dupNotebook.id]: __, ...remainingLastActive } = get().lastActivePageByNotebook;
-          const { [dupNotebook.id]: ___, ...remainingLoadStates } = get().localFolderLoadStates;
+          const { [dupNotebook.id]: _, ...remainingNotebooks } =
+            get().notebooks;
+          const { [dupNotebook.id]: __, ...remainingLastActive } =
+            get().lastActivePageByNotebook;
+          const { [dupNotebook.id]: ___, ...remainingLoadStates } =
+            get().localFolderLoadStates;
 
           const notebook: Notebook = {
             id: finalId,
@@ -251,7 +259,8 @@ export const useNotebooks = create<NotebooksState>()(
           remainingPages.map((page) => [page.id, page]),
         );
 
-        const { [id]: _deletedNotebook, ...remainingNotebooks } = state.notebooks;
+        const { [id]: _deletedNotebook, ...remainingNotebooks } =
+          state.notebooks;
         const { [id]: _deletedLastActive, ...remainingLastActive } =
           state.lastActivePageByNotebook;
         const { [id]: _deletedLoadState, ...remainingLoadStates } =
@@ -264,7 +273,7 @@ export const useNotebooks = create<NotebooksState>()(
           tabsStore.activeTabId &&
           remainingTabs.some((tab) => tab.id === tabsStore.activeTabId)
             ? tabsStore.activeTabId
-            : remainingTabs[0]?.id ?? null;
+            : (remainingTabs[0]?.id ?? null);
         const nextActiveTab = remainingTabs.find(
           (tab) => tab.id === nextActiveTabId,
         );
@@ -281,7 +290,8 @@ export const useNotebooks = create<NotebooksState>()(
 
         let nextActivePageId =
           nextTabPage?.id ??
-          (pagesStore.activePageId && !deletedPageIds.has(pagesStore.activePageId)
+          (pagesStore.activePageId &&
+          !deletedPageIds.has(pagesStore.activePageId)
             ? pagesStore.activePageId
             : null);
 
@@ -326,6 +336,9 @@ export const useNotebooks = create<NotebooksState>()(
       setActiveNotebook: (id) => {
         set({ activeNotebookId: id });
         const notebook = get().notebooks[id];
+        if (notebook?.source === "local-folder") {
+          void usePages.getState().setActivePage(null);
+        }
         if (
           notebook?.source === "local-folder" &&
           notebook.localPath &&
@@ -422,15 +435,17 @@ export const useNotebooks = create<NotebooksState>()(
       migrate: (persistedState: unknown) => {
         const safeState = persistedState as
           | {
-              notebooks?: Record<string, Notebook>
-              activeNotebookId?: string | null
-              lastActivePageByNotebook?: Record<string, string | null>
+              notebooks?: Record<string, Notebook>;
+              activeNotebookId?: string | null;
+              lastActivePageByNotebook?: Record<string, string | null>;
             }
           | undefined;
         if (!safeState?.notebooks) return persistedState;
 
         const notebookList = Object.values(safeState.notebooks);
-        const hasAnyTrue = notebookList.some((notebook) => notebook.editorFullWidth === true);
+        const hasAnyTrue = notebookList.some(
+          (notebook) => notebook.editorFullWidth === true,
+        );
         const shouldPromoteFalseToUnset = !hasAnyTrue;
 
         const migratedNotebooks = Object.fromEntries(

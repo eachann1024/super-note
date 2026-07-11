@@ -1,4 +1,11 @@
-import { useCallback, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import {
   type AiFileReferenceAttrs,
   type AiReferenceSuggestionItem,
@@ -22,6 +29,7 @@ interface UseReferenceMentionsOptions {
   isComposingRef: RefObject<boolean>;
   onContentMutation: () => void;
   onReferenceAdded?: (reference: AiFileReferenceAttrs) => void;
+  searchPages?: (query: string) => AiReferenceSuggestionItem[];
 }
 
 const INACTIVE_MENTION: MentionState = {
@@ -64,9 +72,9 @@ export function createChipElement(attrs: AiFileReferenceAttrs): HTMLSpanElement 
   span.dataset.aiMentionId = attrs.pageId;
   span.dataset.aiMentionAttrs = JSON.stringify(attrs);
   span.className =
-    "inline-flex items-center mx-1 rounded px-1 py-0 text-[11px] font-medium" +
-    " bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30" +
-    " cursor-pointer hover:bg-sky-500/20 select-none align-middle leading-5";
+  "inline-flex items-center mx-1 rounded px-1 py-0 text-[11px] font-medium" +
+    " bg-[var(--goose-interactive-selected)] text-[hsl(var(--foreground))] border border-border" +
+    " cursor-pointer hover:bg-[var(--goose-interactive-hover)] select-none align-middle leading-5";
   span.textContent = `@${attrs.titleSnapshot}`;
   return span;
 }
@@ -76,19 +84,28 @@ export function useReferenceMentions({
   isComposingRef,
   onContentMutation,
   onReferenceAdded,
+  searchPages: searchPagesOverride,
 }: UseReferenceMentionsOptions) {
   const { searchPages } = useEditorPageContext();
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDetectedRef = useRef<DetectedMention | null>(null);
   const [mention, setMention] = useState<MentionState>(INACTIVE_MENTION);
 
-  const mentionItems = mention.active
-    ? searchPages(mention.query).filter((item) => !item.isFolder)
-    : [];
+  const mentionItems = useMemo(
+    () =>
+      mention.active
+        ? (searchPagesOverride ?? searchPages)(mention.query).filter(
+            (item) => !item.isFolder,
+          )
+        : [],
+    [mention.active, mention.query, searchPages, searchPagesOverride],
+  );
 
   // Keep a ref so keyboard handler always sees current items without stale closure
   const mentionItemsRef = useRef(mentionItems);
-  mentionItemsRef.current = mentionItems;
+  useEffect(() => {
+    mentionItemsRef.current = mentionItems;
+  }, [mentionItems]);
 
   const clearMentionState = useCallback(() => {
     lastDetectedRef.current = null;

@@ -21,12 +21,21 @@ export function stripFirstH1(blocks: BlockNoteContent): BlockNoteContent {
   return blocks;
 }
 
+export interface BuildExportMarkdownOptions {
+  includeTitleHeading?: boolean;
+}
+
 export async function buildExportMarkdown(
   page: Page,
   blocks: BlockNoteContent,
+  options: BuildExportMarkdownOptions = {},
 ): Promise<string> {
   if (page.localFilePath) {
     return blocksToMarkdown(blocks);
+  }
+  const includeTitleHeading = options.includeTitleHeading ?? true;
+  if (!includeTitleHeading) {
+    return blocksToMarkdown(stripFirstH1(blocks));
   }
   const title = getPageTitle(page);
   const body = await blocksToMarkdown(stripFirstH1(blocks));

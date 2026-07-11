@@ -67,7 +67,7 @@ export function ComposerSuggestionsList({
   const popover = (
     <div
       style={style}
-      className="overflow-hidden rounded-lg border border-border/80 bg-popover shadow-lg"
+      className="overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
       onMouseDownCapture={(e) => {
         e.preventDefault();
         onMouseDownCapture?.();
@@ -84,8 +84,8 @@ export function ComposerSuggestionsList({
                 className={cn(
                   "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px]",
                   index === activeIndex
-                    ? "bg-accent text-accent-foreground"
-                    : "hover:bg-accent/60 hover:text-accent-foreground",
+                    ? "bg-[var(--goose-interactive-selected)] text-[hsl(var(--foreground))]"
+                    : "hover:bg-[var(--goose-interactive-hover)] hover:text-[hsl(var(--foreground))]",
                 )}
                 onMouseDown={(e) => {
                   e.preventDefault();

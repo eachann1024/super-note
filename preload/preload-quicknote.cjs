@@ -17,8 +17,78 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
   let quickNoteActiveMode = null;
 
   const QUICKNOTE_DB_KEY = "goose-note:quicknote";
+  const STORAGE_DOC_PREFIX = "gn:storage:";
+  const getStorageDocId = (storageKey) => `${STORAGE_DOC_PREFIX}${storageKey}`;
 
-  // 从 uTools dbStorage 读速记持久化偏好（与 A 插件共享同一 key，数据共通）。
+  const clearHostQuickNoteEntryOnce = () => {
+    try { utools.removeSubInput?.(); } catch { /* noop */ }
+    try { utools.hideMainWindow?.(); } catch { /* noop */ }
+  };
+
+  const clearHostQuickNoteEntry = () => {
+    clearHostQuickNoteEntryOnce();
+    // uTools 可能在 feature enter 回调结束后重新绘制命中条。
+    // 后续几拍继续清理，确保打开/关闭 toggle 都不残留宿主搜索框。
+    [0, 16, 80, 180].forEach((delay) => {
+      try { setTimeout(clearHostQuickNoteEntryOnce, delay); } catch { /* noop */ }
+    });
+  };
+
+  const readStoredString = (storageKey) => {
+    try {
+      if (utools?.db?.get) {
+        const doc = utools.db.get(getStorageDocId(storageKey));
+        if (typeof doc?.data === "string") return doc.data;
+        if (typeof doc?.data?.value === "string") return doc.data.value;
+      }
+    } catch { /* noop */ }
+
+    try {
+      const raw =
+        utools.dbStorage && typeof utools.dbStorage.getItem === "function"
+          ? utools.dbStorage.getItem(storageKey)
+          : null;
+      if (typeof raw === "string") {
+        writeStoredString(storageKey, raw);
+        return raw;
+      }
+    } catch { /* noop */ }
+
+    return null;
+  };
+
+  const writeStoredString = (storageKey, value) => {
+    let saved = false;
+    try {
+      if (utools?.db?.put && utools?.db?.get) {
+        const docId = getStorageDocId(storageKey);
+        const current = utools.db.get(docId);
+        let result = utools.db.put({
+          _id: docId,
+          _rev: current?._rev,
+          data: { value, updatedAt: Date.now() },
+        });
+        if (result?.ok === false) {
+          const latest = utools.db.get(docId);
+          result = utools.db.put({
+            _id: docId,
+            _rev: latest?._rev,
+            data: { value, updatedAt: Date.now() },
+          });
+        }
+        saved = result?.ok !== false;
+      }
+    } catch { /* noop */ }
+
+    if (!saved) return;
+    try {
+      if (utools.dbStorage && typeof utools.dbStorage.removeItem === "function") {
+        utools.dbStorage.removeItem(storageKey);
+      }
+    } catch { /* noop */ }
+  };
+
+  // 从 uTools db 文档读速记持久化偏好（与 A 插件共享同一 key，数据共通）。
   // 位置 windowX/windowY 可缺省（首次开窗或老数据）：缺省时回退到「光标屏右上角」。
   const readQuickNotePrefs = () => {
     const fallback = {
@@ -28,10 +98,7 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       windowY: null,
     };
     try {
-      const raw =
-        utools.dbStorage && typeof utools.dbStorage.getItem === "function"
-          ? utools.dbStorage.getItem(QUICKNOTE_DB_KEY)
-          : null;
+      const raw = readStoredString(QUICKNOTE_DB_KEY);
       if (typeof raw !== "string") return fallback;
       const parsed = JSON.parse(raw);
       const st = parsed && parsed.state ? parsed.state : parsed;
@@ -52,7 +119,7 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     }
   };
 
-  // 把窗口当前 bounds（位置+尺寸）写回 dbStorage 速记偏好（持久化），下次开窗沿用。
+  // 把窗口当前 bounds（位置+尺寸）写回 db 文档，作为下次开窗的权威持久化来源。
   // persist-size（拖动停下）与关窗时都调用——拖动只触发 resize、移动不触发，故关窗兜底位置。
   const persistQuickNoteBounds = () => {
     if (!quickNoteWin || quickNoteWin.isDestroyed?.()) return;
@@ -66,10 +133,7 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     const x = Math.round(Number(bounds.x));
     const y = Math.round(Number(bounds.y));
     try {
-      const raw =
-        utools.dbStorage && typeof utools.dbStorage.getItem === "function"
-          ? utools.dbStorage.getItem(QUICKNOTE_DB_KEY)
-          : null;
+      const raw = readStoredString(QUICKNOTE_DB_KEY);
       let parsed = {};
       if (typeof raw === "string") {
         try { parsed = JSON.parse(raw) || {}; } catch { parsed = {}; }
@@ -81,21 +145,16 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       if (Number.isFinite(x)) state.windowX = x;
       if (Number.isFinite(y)) state.windowY = y;
       const next = hasStateWrapper ? { ...parsed, state } : { state, version: 0 };
-      if (utools.dbStorage && typeof utools.dbStorage.setItem === "function") {
-        utools.dbStorage.setItem(QUICKNOTE_DB_KEY, JSON.stringify(next));
-      }
+      writeStoredString(QUICKNOTE_DB_KEY, JSON.stringify(next));
     } catch { /* noop */ }
   };
 
-  // 只更新位置 x/y 写回 dbStorage（尺寸保持库中原值）。供子窗移动上报使用：
+  // 只更新位置 x/y 写回 db 文档（尺寸保持库中原值）。供子窗移动上报使用：
   // 直接用传入坐标，不读 getBounds，避开关窗销毁瞬间取值不可靠的问题。
   const persistQuickNotePosition = (x, y) => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     try {
-      const raw =
-        utools.dbStorage && typeof utools.dbStorage.getItem === "function"
-          ? utools.dbStorage.getItem(QUICKNOTE_DB_KEY)
-          : null;
+      const raw = readStoredString(QUICKNOTE_DB_KEY);
       let parsed = {};
       if (typeof raw === "string") {
         try { parsed = JSON.parse(raw) || {}; } catch { parsed = {}; }
@@ -105,9 +164,7 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       state.windowX = Math.round(x);
       state.windowY = Math.round(y);
       const next = hasStateWrapper ? { ...parsed, state } : { state, version: 0 };
-      if (utools.dbStorage && typeof utools.dbStorage.setItem === "function") {
-        utools.dbStorage.setItem(QUICKNOTE_DB_KEY, JSON.stringify(next));
-      }
+      writeStoredString(QUICKNOTE_DB_KEY, JSON.stringify(next));
     } catch { /* noop */ }
   };
 
@@ -115,6 +172,7 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
   // 隐藏前持久化 bounds；保留 quickNoteWin 引用、仅置 visible=false。
   // 若窗口已被宿主销毁（isDestroyed），清空引用走下次新建路径。
   const hideQuickNoteWindow = () => {
+    clearHostQuickNoteEntry();
     if (!quickNoteWin || quickNoteWin.isDestroyed?.()) {
       quickNoteWin = null;
       quickNoteVisible = false;
@@ -125,11 +183,13 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     try { quickNoteWin.hide?.(); } catch { /* noop */ }
     quickNoteVisible = false;
     quickNoteActiveMode = null;
+    clearHostQuickNoteEntry();
   };
 
   // 复用已隐藏的窗口：show + focus + 置顶，并推 enter 让子窗重新聚焦光标（草稿延续，不重解析）。
   const showExistingQuickNoteWindow = (mode) => {
     if (!quickNoteWin || quickNoteWin.isDestroyed?.()) return false;
+    clearHostQuickNoteEntry();
     try {
       quickNoteWin.show?.();
       quickNoteWin.focus?.();
@@ -218,6 +278,7 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
 
   // ── 打开速记小窗 ──────────────────────────────────────────────
   const openQuickNoteWindow = (mode) => {
+    clearHostQuickNoteEntry();
     // 窗口常驻：再次触发 = toggle。可见 → 隐藏；已隐藏 → 秒显（复用已加载的窗口）。
     if (quickNoteWin && !quickNoteWin.isDestroyed?.()) {
       if (quickNoteVisible) {
@@ -244,6 +305,8 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       skipTaskbar: true,
       closable: true,
       alwaysOnTop: QUICKNOTE_ALWAYS_ON_TOP,
+      // 小窗需要从背景中浮出来；边界感由原生外投影 + Web 内描边共同承担。
+      hasShadow: true,
       roundedCorners: true,
       webPreferences: {
         preload: "preload-quicknote.js",
@@ -313,10 +376,10 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       try {
         triggerQuickNote(mode);
       } catch { /* noop */ }
+      clearHostQuickNoteEntry();
       // ⚠️ 关键：不要 outPlugin！B 进程要常驻持有 quickNoteWin 引用，
       // 否则第二次按速记键的 toggle 关窗会失效（引用丢了变成又开一个新窗）。
-      // mode:"none" + 删了 main 后，uTools 不会再渲染空白主窗，无需 hideMainWindow。
-      // （若真机仍残留 uTools 输入框，再视情况在此加 utools.hideMainWindow()，先不加。）
+      // mode:"none" 在真机仍可能短暂留下宿主命中条；这里显式隐藏主窗并移除 subInput。
     };
     window.exports = {
       quicknote_new: {
@@ -332,5 +395,11 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
         },
       },
     };
+
+    if (typeof utools.onPluginOut === "function") {
+      utools.onPluginOut(() => {
+        clearHostQuickNoteEntry();
+      });
+    }
   }
 }

@@ -145,6 +145,12 @@
 /* class 模式暗色：等价 v3 darkMode: ["class"] */
 @custom-variant dark (&:is(.dark *));
 
+.goose-sidebar-context-menu [role="menuitem"],
+.goose-sidebar-context-menu [role="menuitemcheckbox"],
+.goose-sidebar-context-menu [role="menuitemradio"] {
+  column-gap: 12px;
+}
+
 /* ── Tailwind v4 CSS-first 主题映射 ──────────────────────────────
  * 用 @theme inline：颜色值保持 hsl(var(--xxx)) 引用，
  * 真正的色值仍由下方 :root/.dark 里的 CSS 变量驱动（与 shadcn v4 一致）。
@@ -1159,6 +1165,39 @@
 @media (prefers-reduced-motion: reduce) {
   .ai-thinking-flow::before,
   .ai-thinking-flow::after {
+    animation: none;
+  }
+}
+
+/* 本地空文件夹点击反馈：只让图标短促摆动，不弹 toast 打断浏览节奏。 */
+.goose-empty-folder-shake {
+  transform-origin: 50% 60%;
+  animation: goose-empty-folder-shake 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes goose-empty-folder-shake {
+  0% {
+    transform: translateX(0) rotate(0deg);
+  }
+  18% {
+    transform: translateX(-1.5px) rotate(-7deg);
+  }
+  38% {
+    transform: translateX(1.5px) rotate(7deg);
+  }
+  58% {
+    transform: translateX(-1px) rotate(-4deg);
+  }
+  78% {
+    transform: translateX(0.75px) rotate(3deg);
+  }
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goose-empty-folder-shake {
     animation: none;
   }
 }

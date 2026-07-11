@@ -55,6 +55,15 @@ export interface UToolsAiApi {
     option: {
       model?: string;
       messages: AIMessage[];
+      tools?: Array<{
+        type: "function";
+        function: {
+          name: string;
+          description: string;
+          parameters: Record<string, unknown>;
+          required?: string[];
+        };
+      }>;
     },
     streamCallback?: (chunk: {
       role?: "system" | "user" | "assistant";

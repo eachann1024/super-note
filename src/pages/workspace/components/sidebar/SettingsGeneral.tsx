@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import * as LucideIcons from "lucide-react";
 import {
+  AUTO_CLOSE_INACTIVE_TABS_HOURS_MAX,
+  AUTO_CLOSE_INACTIVE_TABS_HOURS_MIN,
   UTOOLS_WINDOW_HEIGHT_MAX,
   UTOOLS_WINDOW_HEIGHT_MIN,
   type CustomAction,
@@ -24,14 +26,16 @@ interface SettingsGeneralProps {
   setWindowHeight: (height: number) => void;
   autoOpenLastNote: boolean;
   setAutoOpenLastNote: (enabled: boolean) => void;
+  autoCloseInactiveTabs: boolean;
+  setAutoCloseInactiveTabs: (enabled: boolean) => void;
+  autoCloseInactiveTabsHours: number;
+  setAutoCloseInactiveTabsHours: (hours: number) => void;
   showRecentInSearch: boolean;
   setShowRecentInSearch: (enabled: boolean) => void;
   notebookDropdownHoverExpand: boolean;
   setNotebookDropdownHoverExpand: (enabled: boolean) => void;
   sidebarClickBehavior: "preview" | "replace-current";
   setSidebarClickBehavior: (behavior: "preview" | "replace-current") => void;
-  enterKeyBehavior?: "create-block" | "save-exit";
-  setEnterKeyBehavior?: (behavior: "create-block" | "save-exit") => void;
   customActions?: CustomAction[];
   addCustomAction?: (action: Omit<CustomAction, "id">) => void;
   updateCustomAction?: (id: string, updates: Partial<Omit<CustomAction, "id">>) => void;
@@ -55,14 +59,16 @@ export function SettingsGeneral({
   setWindowHeight,
   autoOpenLastNote,
   setAutoOpenLastNote,
+  autoCloseInactiveTabs,
+  setAutoCloseInactiveTabs,
+  autoCloseInactiveTabsHours,
+  setAutoCloseInactiveTabsHours,
   showRecentInSearch,
   setShowRecentInSearch,
   notebookDropdownHoverExpand,
   setNotebookDropdownHoverExpand,
   sidebarClickBehavior,
   setSidebarClickBehavior,
-  enterKeyBehavior = "create-block",
-  setEnterKeyBehavior = () => {},
   customActions = [],
   addCustomAction = () => {},
   updateCustomAction = () => {},
@@ -136,27 +142,41 @@ export function SettingsGeneral({
           />
         </div>
         <div className={`flex items-center justify-between gap-4 p-4 mt-2 ${SETTINGS_OPTION_ROW_CLASS}`}>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-3">
-              <LucideIcons.CornerDownLeft className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
-              <Label htmlFor="enter-key-behavior" className="cursor-pointer">
-                默认按回车键行为
+              <LucideIcons.TimerOff className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+              <Label htmlFor="auto-close-inactive-tabs" className="cursor-pointer">
+                自动关闭未访问标签
               </Label>
             </div>
             <p className="mt-1 pl-7 text-xs text-muted-foreground">
-              创建新行：回车新增空白块；保存并退出：小窗编辑或速记回车将直接保存并退出编辑状态（收起键盘）。
+              开启后，超过设定时间未访问的普通标签会自动关闭；固定标签和当前标签会保留。
             </p>
           </div>
-          <div className="flex items-center gap-2" style={{ contentVisibility: "auto" } as any}>
-            <select
-              id="enter-key-behavior"
-              value={enterKeyBehavior}
-              onChange={(e) => setEnterKeyBehavior(e.target.value as any)}
-              className="h-8 rounded-[8px] border border-input bg-[hsl(var(--background))] px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="create-block">创建新行</option>
-              <option value="save-exit">保存并退出</option>
-            </select>
+          <div className="flex shrink-0 items-center gap-2">
+            <Input
+              type="number"
+              min={AUTO_CLOSE_INACTIVE_TABS_HOURS_MIN}
+              max={AUTO_CLOSE_INACTIVE_TABS_HOURS_MAX}
+              step={1}
+              value={autoCloseInactiveTabsHours}
+              disabled={!autoCloseInactiveTabs}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                if (Number.isFinite(next)) {
+                  setAutoCloseInactiveTabsHours(next);
+                }
+              }}
+              className="h-8 w-20 text-right text-sm"
+              aria-label="自动关闭标签小时数"
+            />
+            <span className="text-xs text-muted-foreground">小时</span>
+            <Switch
+              id="auto-close-inactive-tabs"
+              checked={autoCloseInactiveTabs}
+              onCheckedChange={setAutoCloseInactiveTabs}
+              className={SETTINGS_SWITCH_CLASS}
+            />
           </div>
         </div>
       </SettingsSectionCard>
@@ -200,11 +220,11 @@ export function SettingsGeneral({
             <div className="flex items-center gap-3">
               <LucideIcons.Plug2 className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
               <Label htmlFor="open-in-utools" className="cursor-pointer">
-                使用 uTools 打开搜索结果
+                使用 uTools 打开链接
               </Label>
             </div>
             <p className="mt-1 pl-7 text-xs text-muted-foreground">
-              开启后搜索结果链接在 uTools 内置浏览器里打开；关闭则用系统浏览器。
+              开启后，搜索结果和笔记中的网页链接会在 uTools 内置浏览器里打开；关闭则用系统浏览器。
             </p>
           </div>
           <Switch

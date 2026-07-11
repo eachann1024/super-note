@@ -6,8 +6,10 @@ import type { CardThemeId } from "./themes";
 import { getCardTheme } from "./themes";
 import type { WatermarkConfig } from "./watermark";
 import { normalizeWatermarkConfig } from "./watermark";
-import { buildStyledHTML, renderBlock } from "./domSerializer";
+import { buildStyledHTML, renderBlocks } from "./domSerializer";
 import { resolveImageUrls } from "./remoteImageResolver";
+import { renderMermaidBlocksAsImages } from "./mermaid";
+import { renderMathBlocksAsImages } from "./math";
 
 // ── Loading Overlay ────────────────────────────────────────────
 function createLoadingOverlay(): HTMLElement {
@@ -122,7 +124,7 @@ async function captureElementToPng(element: HTMLElement, filename: string) {
       pixelRatio: 4,
       quality: 0.92,
       cacheBust: false,
-      skipFonts: false,
+      skipFonts: true,
       imagePlaceholder:
         "data:image/svg+xml;charset=utf-8," +
         encodeURIComponent(
@@ -178,6 +180,8 @@ export async function exportPageToImage(
   const title = extractTitleFromContent(page.content);
   const content = structuredClone(page.content) as BlockNoteContent;
   await resolveImageUrls(content);
+  await renderMermaidBlocksAsImages(content, theme);
+  await renderMathBlocksAsImages(content, theme);
 
   const container = document.createElement("div");
   container.style.position = "fixed";
@@ -192,9 +196,7 @@ export async function exportPageToImage(
       wm.showTitle && firstBlock?.type === "heading"
         ? content.slice(1)
         : content;
-    const blocksHtml = blocksToRender
-      .map((block) => renderBlock(block, theme))
-      .join("\n");
+    const blocksHtml = renderBlocks(blocksToRender, theme);
     const html = buildStyledHTML({ title, blocksHtml, theme, watermarkConfig: wm });
     container.innerHTML = html;
 
@@ -222,6 +224,8 @@ export async function exportSelectionToImage(
 
   const clonedBlocks = structuredClone(selectionBlocks) as BlockNoteContent;
   await resolveImageUrls(clonedBlocks);
+  await renderMermaidBlocksAsImages(clonedBlocks, theme);
+  await renderMathBlocksAsImages(clonedBlocks, theme);
 
   const container = document.createElement("div");
   container.style.position = "fixed";
@@ -231,9 +235,7 @@ export async function exportSelectionToImage(
   document.body.appendChild(container);
 
   try {
-    const blocksHtml = clonedBlocks
-      .map((block) => renderBlock(block, theme))
-      .join("\n");
+    const blocksHtml = renderBlocks(clonedBlocks, theme);
 
     const html = buildStyledHTML({
       title,

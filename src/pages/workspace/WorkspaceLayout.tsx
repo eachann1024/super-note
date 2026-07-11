@@ -72,8 +72,11 @@ export function WorkspaceLayout({
   const aiEnabled = useSettings((s) => s.ai.enabled);
   const {
     isOpen: aiPanelOpen,
+    open: openAiPanel,
     toggle: toggleAiPanel,
     close: closeAiPanel,
+    capturedSelection: aiPanelCapturedSelection,
+    consumeCapturedSelection: consumeAiPanelCapturedSelection,
   } = useNotebookAiPanel();
   const searchHighlightNonce = usePages((s) => s.searchHighlightNonce);
   const searchHighlightQuery = usePages((s) => s.searchHighlightQuery);
@@ -96,8 +99,13 @@ export function WorkspaceLayout({
     !!historyActivePageId && historyActivePageId === activePageId;
 
   const page = activePageId ? getPage(activePageId) : undefined;
+  const activeNotebook = activeNotebookId
+    ? notebooks[activeNotebookId]
+    : undefined;
   const pageNotebook = page ? notebooks[page.workspaceId] : undefined;
+  const isActiveLocalFolder = activeNotebook?.source === "local-folder";
   const isLocalFolderPage = pageNotebook?.source === "local-folder";
+  const aiAvailableForNotebook = aiEnabled && !isActiveLocalFolder;
   const isEditorFullWidth = Boolean(
     pageNotebook?.editorFullWidth ?? globalEditorFullWidth,
   );
@@ -113,18 +121,38 @@ export function WorkspaceLayout({
   // Mod+J 快捷键（useAppHotkeys 派发）→ 开关 AI 面板，与 UI 按钮门控一致：未启用 AI 时不响应
   useEffect(() => {
     const onToggle = () => {
-      if (!aiEnabled) return;
+      if (!aiAvailableForNotebook) return;
       toggleAiPanel();
     };
     window.addEventListener("goose-note:toggle-ai-panel", onToggle);
     return () =>
       window.removeEventListener("goose-note:toggle-ai-panel", onToggle);
-  }, [aiEnabled, toggleAiPanel]);
+  }, [aiAvailableForNotebook, toggleAiPanel]);
 
-  // AI 功能关闭时强制收起侧栏面板，避免 localStorage 仍为 true 导致下次开启后误展开
+  // 编辑器内的 Space / 斜杠菜单 / 选区 AI 在 uTools 原生模型模式下共用此入口。
+  // 使用 open 而非 toggle，重复触发不会把已经打开的面板关掉。
   useEffect(() => {
-    if (!aiEnabled) closeAiPanel();
-  }, [aiEnabled, closeAiPanel]);
+    const onOpen = (event: Event) => {
+      if (!aiAvailableForNotebook) return;
+      const detail = (event as CustomEvent<unknown>).detail;
+      const capture =
+        detail &&
+        typeof detail === "object" &&
+        (detail as Record<string, unknown>).version === 1 &&
+        typeof (detail as Record<string, unknown>).pageId === "string" &&
+        Boolean((detail as Record<string, unknown>).selection)
+          ? (detail as Parameters<typeof openAiPanel>[0])
+          : null;
+      openAiPanel(capture);
+    };
+    window.addEventListener("goose-note:open-ai-panel", onOpen);
+    return () => window.removeEventListener("goose-note:open-ai-panel", onOpen);
+  }, [aiAvailableForNotebook, openAiPanel]);
+
+  // AI 功能不可用时强制收起侧栏面板，避免 localStorage 仍为 true 导致下次误展开
+  useEffect(() => {
+    if (!aiAvailableForNotebook) closeAiPanel();
+  }, [aiAvailableForNotebook, closeAiPanel]);
 
   useEffect(() => {
     if (locateRetryRef.current) {
@@ -228,8 +256,10 @@ export function WorkspaceLayout({
               <>
                 <PageHeader
                   onOpenSearch={openWelcomeTabHandler}
-                  aiPanelOpen={aiEnabled && aiPanelOpen}
-                  onToggleAiPanel={aiEnabled ? toggleAiPanel : undefined}
+                  aiPanelOpen={aiAvailableForNotebook && aiPanelOpen}
+                  onToggleAiPanel={
+                    aiAvailableForNotebook ? toggleAiPanel : undefined
+                  }
                 />
                 <PageEmptyState />
               </>
@@ -255,156 +285,169 @@ export function WorkspaceLayout({
               </>
             ) : activePageId && page ? (
               <>
-                <PageHeader
-                  page={page}
-                  onOpenSearch={openWelcomeTabHandler}
-                  onToggleFavorite={() =>
-                    updatePage(activePageId, { isFavorite: !page.isFavorite })
-                  }
-                  onTogglePinned={() =>
-                    updatePage(activePageId, { isPinned: !page.isPinned })
-                  }
-                  onRestore={() => restorePageWithToast(activePageId)}
-                  onDelete={() =>
-                    void permanentlyDeletePageWithCleanup(activePageId)
-                  }
-                  aiPanelOpen={aiEnabled && aiPanelOpen}
-                  onToggleAiPanel={aiEnabled ? toggleAiPanel : undefined}
-                />
-
                 <EditorHostBridge
                   page={page}
                   isEditorFullWidth={isEditorFullWidth}
                 >
-                  <div className="workspace-editor-surface relative ml-0 mt-0 flex-1 min-h-0 overflow-hidden flex flex-row">
-                    <div
-                      ref={scrollContainerRef}
-                      className={cn(
-                        "h-full flex-1 min-w-0 overflow-y-auto page-scroll-container bg-[hsl(var(--goose-editor-bg))]",
-                      )}
-                    >
-                      {(() => {
-                        const contentBlocks = Array.isArray(page.content)
-                          ? page.content
-                          : Array.isArray(page.content?.content)
-                            ? page.content.content
-                            : [];
-                        const hasBodyContent = contentBlocks
-                          .slice(1)
-                          .some(
-                            (block: unknown) =>
-                              extractPlainText([block] as any).trim().length >
-                              0,
-                          );
-                        const isNewPage =
-                          page.createdAt === page.updatedAt && !hasBodyContent;
+                  <div className="workspace-editor-surface relative ml-0 mt-0 flex min-h-0 flex-1 flex-row gap-2 overflow-hidden !bg-[hsl(var(--goose-shell-bg))]">
+                    <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] bg-[hsl(var(--goose-editor-bg))]">
+                      <PageHeader
+                        page={page}
+                        onOpenSearch={openWelcomeTabHandler}
+                        onToggleFavorite={() =>
+                          updatePage(activePageId, { isFavorite: !page.isFavorite })
+                        }
+                        onTogglePinned={() =>
+                          updatePage(activePageId, { isPinned: !page.isPinned })
+                        }
+                        onRestore={() => restorePageWithToast(activePageId)}
+                        onDelete={() =>
+                          void permanentlyDeletePageWithCleanup(activePageId)
+                        }
+                        aiPanelOpen={aiAvailableForNotebook && aiPanelOpen}
+                        onToggleAiPanel={
+                          aiAvailableForNotebook ? toggleAiPanel : undefined
+                        }
+                      />
+                      <div
+                        ref={scrollContainerRef}
+                        className={cn(
+                          "h-full flex-1 min-w-0 overflow-y-auto page-scroll-container bg-[hsl(var(--goose-editor-bg))]",
+                        )}
+                      >
+                        {(() => {
+                          const contentBlocks = Array.isArray(page.content)
+                            ? page.content
+                            : Array.isArray(page.content?.content)
+                              ? page.content.content
+                              : [];
+                          const hasBodyContent = contentBlocks
+                            .slice(1)
+                            .some(
+                              (block: unknown) =>
+                                extractPlainText([block] as any).trim().length >
+                                0,
+                            );
+                          const isNewPage =
+                            page.createdAt === page.updatedAt &&
+                            !hasBodyContent;
 
-                        return (
-                          <div
-                            className={cn(
-                              "flex min-h-full flex-col",
-                              isEditorFullWidth ? "px-14" : "px-8",
-                              page.icon ? "pt-4" : "pt-0",
-                            )}
-                          >
+                          return (
                             <div
                               className={cn(
-                                page.icon ? "-mb-1 mt-2" : "mt-1",
-                                isEditorFullWidth
-                                  ? "max-w-full"
-                                  : "w-full max-w-[720px] mx-auto",
+                                "flex min-h-full flex-col",
+                                isEditorFullWidth ? "px-14" : "px-8",
+                                page.icon ? "pt-4" : "pt-0",
                               )}
                             >
-                              {!isLocalFolderPage && (
-                                <div
-                                  className={cn(
-                                    "group relative",
-                                    !page.icon && "min-h-[20px] mb-2",
-                                  )}
-                                >
-                                  <IconSelector
-                                    value={page.icon}
-                                    onChange={(icon) =>
-                                      !page.trashedAt &&
-                                      !page.isLocked &&
-                                      updatePage(activePageId, { icon })
-                                    }
+                              <div
+                                className={cn(
+                                  page.icon ? "-mb-1 mt-2" : "mt-1",
+                                  isEditorFullWidth
+                                    ? "max-w-full"
+                                    : "w-full max-w-[720px] mx-auto",
+                                )}
+                              >
+                                {!isLocalFolderPage && (
+                                  <div
+                                    className={cn(
+                                      "group relative",
+                                      !page.icon && "min-h-[20px] mb-2",
+                                    )}
                                   >
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className={cn(
-                                        "inline-flex h-auto w-auto p-0 items-center justify-start transition-all duration-300",
-                                        page.icon
-                                          ? "opacity-100 scale-100 [&_svg]:!size-[5.25rem] [&_svg]:stroke-[2.2]"
-                                          : page.trashedAt || page.isLocked
-                                            ? "opacity-0"
-                                            : isNewPage
-                                              ? "opacity-100 animate-slow-pulse hover:scale-105"
-                                              : "opacity-0 group-hover:opacity-100 hover:scale-105",
-                                        // 模态浮层（右键菜单/下拉菜单）打开时隐藏提示并暂停脉冲，
-                                        // 避免菜单旁忽隐忽现的"幽灵阴影"
-                                        !page.icon &&
-                                          "[body[data-scroll-locked]_&]:!opacity-0 [body[data-scroll-locked]_&]:!animate-none",
-                                      )}
+                                    <IconSelector
+                                      value={page.icon}
+                                      onChange={(icon) =>
+                                        !page.trashedAt &&
+                                        !page.isLocked &&
+                                        updatePage(activePageId, { icon })
+                                      }
                                     >
-                                      {page.icon ? (
-                                        (LucideIcons as any)[page.icon] ? (
-                                          (() => {
-                                            const Icon = (LucideIcons as any)[
-                                              page.icon
-                                            ];
-                                            return <Icon />;
-                                          })()
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className={cn(
+                                          "inline-flex h-auto w-auto p-0 items-center justify-start transition-all duration-300",
+                                          page.icon
+                                            ? "opacity-100 scale-100 [&_svg]:!size-[5.25rem] [&_svg]:stroke-[2.2]"
+                                            : page.trashedAt || page.isLocked
+                                              ? "opacity-0"
+                                              : isNewPage
+                                                ? "opacity-100 animate-slow-pulse hover:scale-105"
+                                                : "opacity-0 group-hover:opacity-100 hover:scale-105",
+                                          // 模态浮层（右键菜单/下拉菜单）打开时隐藏提示并暂停脉冲，
+                                          // 避免菜单旁忽隐忽现的"幽灵阴影"
+                                          !page.icon &&
+                                            "[body[data-scroll-locked]_&]:!opacity-0 [body[data-scroll-locked]_&]:!animate-none",
+                                        )}
+                                      >
+                                        {page.icon ? (
+                                          (LucideIcons as any)[page.icon] ? (
+                                            (() => {
+                                              const Icon = (LucideIcons as any)[
+                                                page.icon
+                                              ];
+                                              return <Icon />;
+                                            })()
+                                          ) : (
+                                            <span className="text-[5.25rem] leading-none">
+                                              {page.icon}
+                                            </span>
+                                          )
                                         ) : (
-                                          <span className="text-[5.25rem] leading-none">
-                                            {page.icon}
-                                          </span>
-                                        )
-                                      ) : (
-                                        <div className="flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted px-2 py-1 rounded-md">
-                                          <LucideIcons.Smile className="h-4 w-4" />
-                                          <span>添加图标</span>
-                                        </div>
-                                      )}
-                                    </Button>
-                                  </IconSelector>
-                                </div>
-                              )}
-                            </div>
+                                          <div className="flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted px-2 py-1 rounded-md">
+                                            <LucideIcons.Smile className="h-4 w-4" />
+                                            <span>添加图标</span>
+                                          </div>
+                                        )}
+                                      </Button>
+                                    </IconSelector>
+                                  </div>
+                                )}
+                              </div>
 
-                            <ErrorBoundary
-                              resetKey={activePageId}
-                              fallback={(_, reset) => (
-                                <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
-                                  <p>当前页面渲染失败，已阻止整窗白屏。</p>
-                                  <button
-                                    type="button"
-                                    onClick={reset}
-                                    className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-[var(--goose-interactive-hover)]"
-                                  >
-                                    重试
-                                  </button>
-                                </div>
-                              )}
-                            >
-                              <Editor
-                                ref={editorRef}
-                                editable={!page.isLocked && !page.trashedAt}
-                              />
-                            </ErrorBoundary>
-                          </div>
-                        );
-                      })()}
+                              <ErrorBoundary
+                                key={activePageId}
+                                resetKey={activePageId}
+                                fallback={(_, reset) => (
+                                  <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
+                                    <p>当前页面渲染失败，已阻止整窗白屏。</p>
+                                    <button
+                                      type="button"
+                                      onClick={reset}
+                                      className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-[var(--goose-interactive-hover)]"
+                                    >
+                                      重试
+                                    </button>
+                                  </div>
+                                )}
+                              >
+                                <Editor
+                                  ref={editorRef}
+                                  editable={!page.isLocked && !page.trashedAt}
+                                />
+                              </ErrorBoundary>
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
                     {/* NotebookAiPanel 接线 */}
-                    {aiEnabled && aiPanelOpen && activeNotebookId && (
-                      <NotebookAiPanel
-                        notebookId={activeNotebookId}
-                        onClose={closeAiPanel}
-                      />
-                    )}
+                    {aiAvailableForNotebook &&
+                      aiPanelOpen &&
+                      activeNotebookId && (
+                        <NotebookAiPanel
+                          key={activeNotebookId}
+                          notebookId={activeNotebookId}
+                          onClose={closeAiPanel}
+                          editorRef={editorRef}
+                          capturedSelection={aiPanelCapturedSelection}
+                          onConsumeCapturedSelection={
+                            consumeAiPanelCapturedSelection
+                          }
+                        />
+                      )}
                   </div>
                 </EditorHostBridge>
               </>

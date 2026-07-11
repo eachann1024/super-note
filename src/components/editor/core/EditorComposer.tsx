@@ -15,7 +15,6 @@ import { offset as floatingOffset, shift as floatingShift } from "@floating-ui/r
 import {
   clonePageContent,
   getContentSignature,
-  normalizePageContent,
   type BlockNoteContent,
 } from "@/components/editor/utils/blocknote-content";
 import { CustomSlashMenu } from "@/components/editor/core/CustomSlashMenu";
@@ -23,7 +22,8 @@ import {
   EditorFormattingToolbar,
   shouldRenderFormattingToolbar,
 } from "@/components/editor/toolbars/formatting";
-import { AIMenuController } from "@blocknote/xl-ai";
+import { AIExtension, AIMenuController } from "@blocknote/xl-ai";
+import { GooseAIMenu } from "@/components/editor/ai/GooseAIMenu";
 import { useFormattingToolbarAi } from "@/components/editor/state/formattingToolbarAi";
 import { EditorSideMenu } from "@/components/editor/core/EditorSideMenu";
 import { ImageLightbox } from "@/components/editor/image/ImageLightbox";
@@ -41,6 +41,7 @@ import { shouldOpenSlashSuggestionMenu } from "@/components/editor/utils/slashMe
 import { getQuicknoteSlashMenuFloatingOptions } from "@/components/editor/utils/quicknoteSlashMenuFloating";
 import { LocalFileTitle } from "@/pages/workspace/components/page/LocalFileTitle";
 import { shouldUseRawEditorContent } from "@/components/editor/core/editorContentMode";
+import { useEditorSettings } from "@/components/editor/platform/hostContext";
 
 // Re-exports to prevent broken imports elsewhere
 export {
@@ -73,7 +74,7 @@ type EditorComposerProps = {
   getSlashItems: (query: string) => Promise<any[]>;
   pageIdForUpdateRef: RefObject<string | null>;
   syncedContentSignatureRef: RefObject<string | null>;
-  debouncedUpdate: ((id: string, content: BlockNoteContent) => void) & { cancel: () => void };
+  debouncedUpdate: ((id: string) => void) & { cancel: () => void };
   /** 自上次程序化同步（切页/外部重载）以来用户是否真实交互过（见 Editor.tsx 意图门控）。 */
   userInteractedRef: RefObject<boolean>;
   /** 静默同步 store（不标脏、不入保存队列）：用于编辑器初始化后的异步 props 补全。 */
@@ -117,6 +118,55 @@ export function EditorComposer({
   const [linkPopoverUrl, setLinkPopoverUrl] = useState("");
   const linkPopoverRef = useRef<HTMLDivElement | null>(null);
   const [findBarOpen, setFindBarOpen] = useState(false);
+  const { ai: aiSettings } = useEditorSettings();
+
+  const handleEditorKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (
+      __GOOSE_LITE__ ||
+      event.key !== " " ||
+      event.defaultPrevented ||
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing ||
+      !editable ||
+      !aiSettings.enabled ||
+      page?.localFilePath
+    ) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest(".bn-editor")) return;
+
+    let block: any;
+    try {
+      block = editor.getTextCursorPosition().block;
+    } catch {
+      return;
+    }
+    const content = block?.content;
+    const isEmptyParagraph =
+      block?.type === "paragraph" &&
+      (content === "" ||
+        content == null ||
+        (Array.isArray(content) && content.length === 0));
+    if (!isEmptyParagraph) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (!aiSettings.useCustomProvider) {
+      window.dispatchEvent(new CustomEvent("goose-note:open-ai-panel"));
+      return;
+    }
+
+    const ai = editor.getExtension(AIExtension);
+    if (ai && block.id) {
+      ai.openAIMenuAtBlock(block.id);
+    }
+  };
 
   useEffect(() => {
     const handleOpenFind = () => {
@@ -220,6 +270,7 @@ export function EditorComposer({
       editorContainerRef={editorContainerRef}
       handleEditorBlankMouseDown={handleEditorBlankMouseDown}
       handleEditorPasteCapture={handleEditorPasteCapture}
+      handleEditorKeyDownCapture={handleEditorKeyDownCapture}
       searchProviders={searchProviders}
       customActions={customActions}
       effectiveTheme={effectiveTheme}
@@ -250,21 +301,18 @@ export function EditorComposer({
           // 同样豁免 normalize，否则 onChange 在此把首块强转 H1 并回写持久化，
           // 导致小窗重开后首块永久变成「标题1」。
           const isLocalPage = shouldUseRawEditorContent(page);
-          const rawContent = clonePageContent(editor.document as BlockNoteContent);
-          const nextContent = isLocalPage
-            ? rawContent
-            : normalizePageContent(rawContent);
-          const nextSig = getContentSignature(nextContent);
-          if (nextSig === syncedContentSignatureRef.current) return;
-          syncedContentSignatureRef.current = nextSig;
           // 用户意图门控（仅 local 页面）：打开后无任何用户交互时的 onChange 来自
           // BlockNote 异步 props 补全（折叠块/视频/带属性图片等），静默同步 store 与
           // 基线、不入保存队列。一旦用户交互过（打字/IME/点击/拖拽…），照常入队保存。
           if (isLocalPage && !userInteractedRef.current) {
+            const nextContent = clonePageContent(editor.document as BlockNoteContent);
+            const nextSig = getContentSignature(nextContent);
+            if (nextSig === syncedContentSignatureRef.current) return;
+            syncedContentSignatureRef.current = nextSig;
             silentContentSync(nextContent);
             return;
           }
-          debouncedUpdate(safePageId, nextContent);
+          debouncedUpdate(safePageId);
           if (userInteractedRef.current) {
             useTabs.getState().promotePreviewTab();
           }
@@ -316,7 +364,7 @@ export function EditorComposer({
           }}
         />
         {/* 速记小窗（__GOOSE_LITE__）不挂 AI 菜单。 */}
-        {!__GOOSE_LITE__ && <AIMenuController />}
+        {!__GOOSE_LITE__ && <AIMenuController aiMenu={GooseAIMenu} />}
       </BlockNoteView>
       {linkPopoverOpen && (
         <div

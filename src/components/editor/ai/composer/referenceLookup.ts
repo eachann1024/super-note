@@ -150,12 +150,14 @@ export function getAiReferenceSuggestionItems(
   activeNotebookId: string | null,
   options?: {
     includeFolders?: boolean;
+    notebookId?: string | null;
   },
 ) {
   const normalizedQuery = normalizeSearchValue(query);
 
   return Object.values(pages)
     .filter((page) => !page.trashedAt)
+    .filter((page) => !options?.notebookId || page.workspaceId === options.notebookId)
     .filter((page) => options?.includeFolders || !page.isFolder)
     .filter((page) => {
       if (!normalizedQuery) return true;

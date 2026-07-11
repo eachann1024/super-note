@@ -11,6 +11,7 @@ import {
   type AiComposerPayload,
   type AiComposerToken,
   type AiFileReferenceAttrs,
+  type AiReferenceSuggestionItem,
 } from "./referenceLookup";
 import { ComposerSuggestionsList } from "@/components/editor/ai/composer/ComposerSuggestionsList";
 import { createChipElement, useReferenceMentions } from "./useReferenceMentions";
@@ -140,8 +141,10 @@ interface AiComposerInputProps {
   onContentChange?: (content: JSONContent | null) => void;
   onIsEmptyChange?: (isEmpty: boolean) => void;
   onReferenceAdded?: (reference: AiFileReferenceAttrs) => void;
+  searchPages?: (query: string) => AiReferenceSuggestionItem[];
   variant?: "compact" | "panel";
   compactWidthClass?: string;
+  disabled?: boolean;
 }
 
 export const AiComposerInput = forwardRef<AiComposerInputHandle, AiComposerInputProps>(
@@ -156,8 +159,10 @@ export const AiComposerInput = forwardRef<AiComposerInputHandle, AiComposerInput
       onContentChange,
       onIsEmptyChange,
       onReferenceAdded,
+      searchPages,
       variant = "compact",
       compactWidthClass,
+      disabled,
     },
     ref,
   ) => {
@@ -199,6 +204,7 @@ export const AiComposerInput = forwardRef<AiComposerInputHandle, AiComposerInput
       isComposingRef,
       onContentMutation: emitCurrentContent,
       onReferenceAdded,
+      searchPages,
     });
 
     // ── imperative handle ────────────────────────────────────────────────────
@@ -336,7 +342,7 @@ export const AiComposerInput = forwardRef<AiComposerInputHandle, AiComposerInput
         {(placeholderOverlayText || placeholder) && isEmpty ? (
           <div
             className={cn(
-              "pointer-events-none absolute left-0 right-0 z-[1] text-muted-foreground/60",
+              "pointer-events-none absolute left-0 right-0 z-[1] text-muted-foreground opacity-70",
               variant === "panel"
                 ? "top-0 line-clamp-3 pr-10 text-[13px] leading-6"
                 : "top-0 pr-8 text-[12px] leading-[20px]",
@@ -351,13 +357,15 @@ export const AiComposerInput = forwardRef<AiComposerInputHandle, AiComposerInput
           role="textbox"
           aria-label="AI 输入"
           aria-multiline="true"
-          contentEditable
+          aria-disabled={disabled ? "true" : undefined}
+          contentEditable={!disabled}
           suppressContentEditableWarning
           data-ai-composer-editor="true"
           data-ai-composer-variant={variant}
           className={cn(
             "block w-full bg-transparent p-0 text-foreground outline-none",
             "overflow-y-auto break-words whitespace-pre-wrap",
+            disabled && "cursor-not-allowed opacity-60",
             variant === "panel"
               ? "min-h-[56px] max-h-[144px] text-[13px] leading-6"
               : "min-h-[20px] max-h-[88px] text-[12px] leading-[20px]",

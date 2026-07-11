@@ -1,8 +1,7 @@
 import { useState } from "react"
-import * as LucideIcons from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
-import { formatShortcut } from "@/lib/utils"
+import { formatShortcut, isMacPlatform } from "@/lib/utils"
 import {
   DEFAULT_CLOSE_TAB_SHORTCUT,
   DEFAULT_SEARCH_PANEL_CLOSE_SHORTCUT,
@@ -24,19 +23,67 @@ interface SettingsShortcutsProps {
 const SETTINGS_OPTION_ROW_CLASS =
   "rounded-[12px] bg-[hsl(var(--goose-selected-bg)/0.58)] dark:bg-[hsl(var(--foreground)/0.08)]"
 
+const FIXED_SHORTCUT_VALUES = [
+  ...Array.from({ length: 9 }, (_, index) => `Mod+${index + 1}`),
+  "Ctrl+Tab",
+  "Ctrl+Shift+Tab",
+  "Mod+G",
+  "Mod+Shift+G",
+  "Mod+=",
+  "Mod+-",
+  "Mod+0",
+  "F3",
+  "Shift+F3",
+]
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function normalizeShortcutForConflict(
+  shortcut: string,
+  isMac = isMacPlatform(),
+) {
+  const normalized = shortcut
+    .split("+")
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean)
+    .map((part) => {
+      if (["mod", "cmdorctrl", "cmdorcontrol", "commandorcontrol"].includes(part)) {
+        return isMac ? "meta" : "ctrl"
+      }
+      if (["meta", "command", "cmd"].includes(part)) return "meta"
+      if (["control", "ctrl"].includes(part)) return "ctrl"
+      if (["alt", "option"].includes(part)) return "alt"
+      if (part === "escape") return "esc"
+      if (part === " ") return "space"
+      return part
+    })
+
+  const modifiers = ["ctrl", "meta", "alt", "shift"].filter((part) =>
+    normalized.includes(part),
+  )
+  const key = normalized.find((part) => !modifiers.includes(part))
+  return [...modifiers, ...(key ? [key] : [])].join("+")
+}
+
 // Collect all currently configured shortcuts to detect conflicts
-function getAllConfiguredShortcuts(
+// eslint-disable-next-line react-refresh/only-export-components
+export function getAllConfiguredShortcuts(
   appShortcuts: Record<string, string>,
   closeTabShortcut: string,
   searchPanelCloseShortcut: string,
   excludeId: string,
 ): string[] {
-  const shortcuts: string[] = []
+  const shortcuts = FIXED_SHORTCUT_VALUES.map((shortcut) =>
+    normalizeShortcutForConflict(shortcut),
+  )
   for (const [id, s] of Object.entries(appShortcuts)) {
-    if (id !== excludeId && s) shortcuts.push(s.toLowerCase())
+    if (id !== excludeId && s) shortcuts.push(normalizeShortcutForConflict(s))
   }
-  if (excludeId !== "close-tab" && closeTabShortcut) shortcuts.push(closeTabShortcut.toLowerCase())
-  if (excludeId !== "search-panel-close" && searchPanelCloseShortcut) shortcuts.push(searchPanelCloseShortcut.toLowerCase())
+  if (excludeId !== "close-tab" && closeTabShortcut) {
+    shortcuts.push(normalizeShortcutForConflict(closeTabShortcut))
+  }
+  if (excludeId !== "search-panel-close" && searchPanelCloseShortcut) {
+    shortcuts.push(normalizeShortcutForConflict(searchPanelCloseShortcut))
+  }
   return shortcuts
 }
 
@@ -50,7 +97,7 @@ function makeAppShortcutSetter(
   return (shortcut: string) => {
     if (shortcut) {
       const existing = getAllConfiguredShortcuts(appShortcuts, closeTabShortcut, searchPanelCloseShortcut, id)
-      if (existing.includes(shortcut.toLowerCase())) {
+      if (existing.includes(normalizeShortcutForConflict(shortcut))) {
         toast.warning("快捷键冲突", {
           description: `${formatShortcut(shortcut)} 已被其他操作占用，请选择其他快捷键。`,
         })
@@ -71,7 +118,7 @@ function makeCloseSetter(
   return (shortcut: string) => {
     if (shortcut) {
       const existing = getAllConfiguredShortcuts(appShortcuts, closeTabShortcut, searchPanelCloseShortcut, excludeId)
-      if (existing.includes(shortcut.toLowerCase())) {
+      if (existing.includes(normalizeShortcutForConflict(shortcut))) {
         toast.warning("快捷键冲突", {
           description: `${formatShortcut(shortcut)} 已被其他操作占用，请选择其他快捷键。`,
         })
@@ -83,7 +130,7 @@ function makeCloseSetter(
 }
 
 const FIXED_SHORTCUTS = [
-  { label: "切换标签页（按序号）", shortcut: "Alt+1~9/0" },
+  { label: "切换标签页（1~8 对应序号，9 到最后）", shortcut: "Mod+1~9" },
   { label: "循环切换标签页", shortcut: "Ctrl+Tab" },
   { label: "反向循环切换标签页", shortcut: "Ctrl+Shift+Tab" },
   { label: "查找下一处", shortcut: "Mod+G" },
@@ -92,10 +139,11 @@ const FIXED_SHORTCUTS = [
   { label: "字号缩小", shortcut: "Mod+-" },
   { label: "重置字号", shortcut: "Mod+0" },
   { label: "继续查找（F3）", shortcut: "F3" },
+  { label: "反向继续查找", shortcut: "Shift+F3" },
 ]
 
 function KbdShortcut({ shortcut }: { shortcut: string }) {
-  // Special labels like "Alt+1~9/0" render as-is
+  // Special range labels like "Mod+1~9" render as-is
   if (shortcut.includes("~") || shortcut.includes("/")) {
     return (
       <kbd className="inline-flex items-center rounded-[6px] bg-[var(--goose-interactive-hover)] px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
@@ -137,8 +185,10 @@ export function SettingsShortcuts({
       return
     }
     resetAppShortcuts()
+    setCloseTabShortcut(DEFAULT_CLOSE_TAB_SHORTCUT)
+    setSearchPanelCloseShortcut(DEFAULT_SEARCH_PANEL_CLOSE_SHORTCUT)
     setConfirmReset(false)
-    toast.success("已恢复全局动作快捷键默认值")
+    toast.success("已恢复全部快捷键默认值")
   }
 
   const safeSetAppShortcut = (id: string) =>

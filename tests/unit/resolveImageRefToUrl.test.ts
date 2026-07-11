@@ -1,7 +1,11 @@
 import { expect, test } from "playwright/test";
-import { resolveImageRefToUrl } from "../../src/lib/imageStorage/resolveUrl";
+import {
+  clearResolvedImageObjectUrlCache,
+  resolveImageRefToUrl,
+} from "../../src/lib/imageStorage/resolveUrl";
 
 test.afterEach(() => {
+  clearResolvedImageObjectUrlCache();
   delete (globalThis as { window?: unknown }).window;
 });
 
@@ -45,5 +49,34 @@ test("resolveImageRefToUrl isolates relative asset cache by page path", async ()
     ]);
   } finally {
     URL.createObjectURL = originalCreateObjectURL;
+  }
+});
+
+test("clearResolvedImageObjectUrlCache revokes cached object urls", async () => {
+  const revoked: string[] = [];
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      gooseFs: {
+        readFileBase64Async: async () => "YQ==",
+      },
+    },
+  });
+
+  URL.createObjectURL = (() => "blob:cached") as typeof URL.createObjectURL;
+  URL.revokeObjectURL = ((url: string) => {
+    revoked.push(url);
+  }) as typeof URL.revokeObjectURL;
+
+  try {
+    await resolveImageRefToUrl("./assets/one.png", "C:/notes/a/page.md");
+    clearResolvedImageObjectUrlCache();
+    expect(revoked).toEqual(["blob:cached"]);
+  } finally {
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
   }
 });

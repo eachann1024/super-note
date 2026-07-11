@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useEditorSettings } from "@/components/editor/platform/hostContext";
+import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 
 interface MermaidViewProps {
   value: string;
@@ -8,14 +9,11 @@ interface MermaidViewProps {
 export const MermaidView: React.FC<MermaidViewProps> = ({ value }) => {
   const [svg, setSvg] = useState<string>("");
   const { theme } = useEditorSettings();
+  const resolvedTheme = useResolvedTheme(theme);
 
   useEffect(() => {
     let active = true;
-    let debounceTimer: number | undefined;
-    const isDark =
-      theme === "dark" ||
-      (theme === "system" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const isDark = resolvedTheme === "dark";
 
     const renderMermaid = async () => {
       if (!value) {
@@ -41,12 +39,12 @@ export const MermaidView: React.FC<MermaidViewProps> = ({ value }) => {
       }
     };
 
-    debounceTimer = window.setTimeout(() => { void renderMermaid(); }, 500);
+    const debounceTimer = window.setTimeout(() => { void renderMermaid(); }, 500);
     return () => {
       active = false;
       if (debounceTimer) clearTimeout(debounceTimer);
     };
-  }, [value, theme]);
+  }, [value, resolvedTheme]);
 
   if (!svg) return null;
 

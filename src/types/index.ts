@@ -62,6 +62,7 @@ export interface Page {
 
   // Local file system (for local-folder mode)
   localFilePath?: string;
+  localPendingCreate?: "folder";
   localReadState?: LocalFileReadState;
   localReadError?: string;
   // 文件顶部 YAML frontmatter 原文（含起止 --- 行，不入编辑器，保存时 prepend 回去）。

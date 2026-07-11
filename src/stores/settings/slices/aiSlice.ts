@@ -11,7 +11,6 @@ export interface AISliceActions {
     setAISelectedModelId: (modelId: string | null) => void
     setAIWorkspaceSelectedModelId: (modelId: string | null) => void
     setAIWorkspaceReasoningLevel: (level: AIReasoningLevel) => void
-    setAICustomProviderEnabled: (enabled: boolean) => void
     saveAICustomConfig: (config: {
         protocol: CustomAIProtocol
         baseURL: string
@@ -28,7 +27,7 @@ export const AI_INITIAL_STATE: AISliceState = {
         selectedModelId: null,
         workspaceSelectedModelId: null,
         workspaceReasoningLevel: 'default',
-        useCustomProvider: false,
+        useCustomProvider: true,
         customProtocol: 'openai',
         customOpenAIBaseURL: DEFAULT_OPENAI_BASE_URL,
         customClaudeBaseURL: DEFAULT_CLAUDE_BASE_URL,
@@ -61,11 +60,6 @@ export function createAISlice(set: SetFn): AISlice {
             set((state) => ({
                 ai: { ...state.ai, workspaceReasoningLevel },
             })),
-        setAICustomProviderEnabled: (useCustomProvider) =>
-            set((state) => {
-                const nextAI = { ...state.ai, useCustomProvider }
-                return { ai: nextAI }
-            }),
         saveAICustomConfig: ({ protocol, baseURL, apiKey, modelOptions }) =>
             set((state) => {
                 const normalizedModelOptions = normalizeAIModelOptions(modelOptions)

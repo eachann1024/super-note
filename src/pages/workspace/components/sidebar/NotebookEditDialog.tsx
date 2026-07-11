@@ -197,7 +197,11 @@ export function NotebookEditDialog({
                   onClick={() => setShowDeleteConfirm(true)}
                   className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 w-full"
                 >
-                  <LucideIcons.Trash2 className="mr-2 h-4 w-4" />
+                  {isLocalFolder ? (
+                    <LucideIcons.FolderX className="mr-2 h-4 w-4" />
+                  ) : (
+                    <LucideIcons.Trash2 className="mr-2 h-4 w-4" />
+                  )}
                   {isLocalFolder ? "移除此记事本" : "删除此记事本"}
                 </Button>
               )}

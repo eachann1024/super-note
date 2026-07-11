@@ -44,6 +44,9 @@ declare global {
     selectDirectory?: () => Promise<string | null>;
     restoreLastDirectory?: () => Promise<string | null>;
     revealItemInFolder?: (path: string) => boolean | Promise<boolean>;
+    listAvailableOpenApps?: <T extends { appName: string }>(candidates: T[]) => Promise<T[]>;
+    openWithApp?: (path: string, app: string) => Promise<boolean>;
+    openTerminalAtPath?: (path: string, terminal?: string) => Promise<boolean>;
   }
 
   interface Window {

@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCreateBlockNote, BlockNoteViewRaw as BlockNoteView } from "@blocknote/react";
 import { zh } from "@blocknote/core/locales";
+import * as LucideIcons from "lucide-react";
 import "@blocknote/react/style.css";
 import { useSettings } from "@/stores/useSettings";
 import { useNotebooks } from "@/stores/useNotebooks";
 import { usePages } from "@/stores/usePages";
 import {
+  createEditorSafeContent,
   normalizePageContent,
   type BlockNoteContent,
 } from "@/components/editor/utils/blocknote-content";
 import { editorSchema } from "@/components/editor/core/EditorComposer";
 import { cn } from "@/lib/utils";
+import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 
 interface HistoryReadOnlyEditorProps {
   content: BlockNoteContent;
@@ -33,7 +36,7 @@ export function HistoryReadOnlyEditor({
   content,
   versionKey,
 }: HistoryReadOnlyEditorProps) {
-  const { globalEditorFullWidth, theme } = useSettings();
+  const { globalEditorFullWidth, tableEvenColumnWidth, theme } = useSettings();
   const { activePageId } = usePages();
   const { notebooks } = useNotebooks();
   const activePage = activePageId ? usePages.getState().pages[activePageId] : null;
@@ -41,28 +44,13 @@ export function HistoryReadOnlyEditor({
   const isEditorFullWidth = Boolean(
     activeNotebook?.editorFullWidth ?? globalEditorFullWidth,
   );
-  const [effectiveTheme, setEffectiveTheme] = useState<"light" | "dark">("light");
+  const effectiveTheme = useResolvedTheme(theme);
+  const [renderError, setRenderError] = useState(false);
 
-  useEffect(() => {
-    const resolve = () => {
-      if (theme === "dark") return setEffectiveTheme("dark");
-      if (theme === "system") {
-        return setEffectiveTheme(
-          window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
-        );
-      }
-      setEffectiveTheme("light");
-    };
-    resolve();
-    if (theme === "system") {
-      const mq = window.matchMedia("(prefers-color-scheme: dark)");
-      const handler = () => resolve();
-      mq.addEventListener("change", handler);
-      return () => mq.removeEventListener("change", handler);
-    }
-  }, [theme]);
-
-  const normalized = useMemo(() => normalizePageContent(content), [content]);
+  const normalized = useMemo(
+    () => createEditorSafeContent(normalizePageContent(content as any), editorSchema),
+    [content],
+  );
 
   const editor = useCreateBlockNote({
     initialContent: normalized as any,
@@ -96,15 +84,52 @@ export function HistoryReadOnlyEditor({
   useEffect(() => {
     if (renderedContentRef.current === normalized) return; // 首次渲染由 initialContent 承担
     renderedContentRef.current = normalized;
-    editor.replaceBlocks(editor.document, normalized as any);
-  }, [editor, normalized]);
+    setRenderError(false);
+    try {
+      editor.replaceBlocks(editor.document, normalized as any);
+    } catch (error) {
+      console.error("[history] replace read-only blocks failed", {
+        versionKey,
+        error,
+      });
+      setRenderError(true);
+      try {
+        const fallbackContent = createEditorSafeContent(undefined, editor.schema);
+        editor.replaceBlocks(editor.document, fallbackContent as any);
+      } catch {
+        // 如果 fallback 也失败，下面的内联状态会接管 UI，避免整窗白屏。
+      }
+    }
+  }, [editor, normalized, versionKey]);
+
+  useEffect(() => {
+    setRenderError(false);
+  }, [versionKey]);
+
+  if (renderError) {
+    return (
+      <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 px-6 text-center">
+        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[var(--goose-interactive-hover)] text-muted-foreground">
+          <LucideIcons.FileWarning className="h-5 w-5" strokeWidth={1.75} />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">此历史版本无法显示</p>
+          <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+            这条历史记录可能来自旧版格式或包含脏数据，已阻止历史视图白屏。
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // 与主 Editor 在 WorkspaceLayout 内的包裹一致；父级 page-scroll-container 全宽为 px-14、窄栏为 px-8
   return (
     <div
+      data-font-family={activePage?.fontFamily ?? "default"}
       className={cn(
-        "mt-1 pt-1 pb-12",
+        "workspace-editor-surface mt-1 flex min-h-0 w-full flex-1 flex-col pt-1 pb-12",
         isEditorFullWidth ? "max-w-full" : "w-full max-w-4xl mx-auto",
+        tableEvenColumnWidth && "goose-table-even-column-width",
       )}
     >
       <BlockNoteView

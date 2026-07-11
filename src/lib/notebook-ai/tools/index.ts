@@ -1,6 +1,6 @@
 import { listNotebooks, listPages, searchNotes, readPage } from "./notes";
 import { createPage, updatePage, replaceInPage } from "./write";
-import { showTable, showChart } from "./visual";
+import { showTable, showChart, showDiagram, showSvg } from "./visual";
 
 export const notebookAiTools = {
   listNotebooks,
@@ -12,10 +12,12 @@ export const notebookAiTools = {
   replaceInPage,
   showTable,
   showChart,
+  showDiagram,
+  showSvg,
 } as const;
 
 export type NotebookAiTools = typeof notebookAiTools;
 
 export { listNotebooks, listPages, searchNotes, readPage };
 export { createPage, updatePage, replaceInPage };
-export { showTable, showChart };
+export { showTable, showChart, showDiagram, showSvg };

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Download, FileText, Globe, RotateCcw, Upload, Cloud, RefreshCw, ChevronRight, Trash2 } from "lucide-react";
+import { Download, FileText, Globe, RotateCcw, Upload, Cloud, CloudOff, RefreshCw, ChevronRight, Trash2 } from "lucide-react";
 import type { ExportOptions } from "@/lib/export";
 import { SelectableCard } from "@/components/ui/selectable-card";
 import { SettingsSectionCard } from "./SettingsSectionCard";
@@ -39,7 +39,6 @@ interface SettingsDataPanelProps {
   exporting: boolean;
   onExport: () => void;
   onOpenResetDialog: () => void;
-  onImportBlob?: (blob: Blob) => Promise<void>;
   onResetAndImport?: (blob: Blob) => Promise<void>;
 }
 
@@ -74,7 +73,6 @@ export function SettingsDataPanel({
   exporting,
   onExport,
   onOpenResetDialog,
-  onImportBlob,
   onResetAndImport,
 }: SettingsDataPanelProps) {
   const selectedCount = selectedIds.length;
@@ -272,8 +270,8 @@ export function SettingsDataPanel({
       const latest = list[0];
       setConfirmConfig({
         open: true,
-        title: "同步最新配置",
-        description: `确认拉取最新的远端备份 ${latest.basename} 并同步到本地？该操作将覆盖本地现有数据。`,
+        title: "同步最新备份",
+        description: `确认拉取最新的远端备份 ${latest.basename} 并同步到本地？恢复前会先校验备份，失败时自动回滚覆盖前的数据。`,
         isDestructive: true,
         onConfirm: async () => {
           setSyncingLatest(true);
@@ -316,7 +314,7 @@ export function SettingsDataPanel({
     setConfirmConfig({
       open: true,
       title: "恢复备份",
-      description: `确认从远端备份 ${file.basename} 恢复数据？该操作将覆盖本地现有数据。`,
+      description: `确认从远端备份 ${file.basename} 恢复数据？恢复前会先校验备份，失败时自动回滚覆盖前的数据。`,
       isDestructive: true,
       onConfirm: async () => {
         setRestoringFile(file.basename);
@@ -494,7 +492,7 @@ export function SettingsDataPanel({
             tone="danger"
             className="pt-3"
             title={<span className="flex items-center gap-2"><RotateCcw className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />重置所有数据</span>}
-            description="会清空所有记事本和页面，无法撤销，操作前建议先导出备份。"
+            description="会清空内部记事本、页面、历史、AI 会话、标签与应用设置；不会删除本地文件夹中的磁盘文件。操作前建议先导出备份。"
             actions={
               <Button variant="destructive" size="sm" onClick={onOpenResetDialog}>
                 重置所有数据
@@ -666,10 +664,14 @@ export function SettingsDataPanel({
             {isRemoteListOpen && (
               <div className="space-y-3 pt-2">
                 {remoteLoading ? (
-                  <p className="text-center text-xs text-muted-foreground py-4">加载中...</p>
+                  <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>正在加载远端备份</span>
+                  </div>
                 ) : remoteFiles.length === 0 ? (
-                  <div className="text-center py-6 border border-dashed rounded-[12px] border-muted">
-                    <p className="text-xs text-muted-foreground">暂无远端备份</p>
+                  <div className="flex flex-col items-center gap-2 border border-dashed rounded-[12px] border-muted py-6 text-center">
+                    <CloudOff className="h-6 w-6 text-muted-foreground" strokeWidth={1.75} />
+                    <p className="text-xs font-medium text-foreground">暂无远端备份</p>
                     <p className="text-[11px] text-muted-foreground/70 mt-1">
                       保存连接配置后，点击“生成并上传”创建您的第一份云端备份
                     </p>

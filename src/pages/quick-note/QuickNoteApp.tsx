@@ -22,6 +22,8 @@ import type { BlockNoteContent } from "@/components/editor/utils/blocknote-conte
 const ZOOM_MIN = 0.7;
 const ZOOM_MAX = 1.8;
 const ZOOM_STEP = 0.1;
+const POSITION_POLL_MS = 120;
+const POSITION_SETTLE_MS = 720;
 
 /**
  * 速记小窗根组件（独立窗口进程）。
@@ -120,18 +122,6 @@ export function QuickNoteApp() {
     return () =>
       window.removeEventListener("goose-note:quicknote-enter", handler);
   }, []);
-  // 监听回车「保存并退出」快捷键事件
-  useEffect(() => {
-    const handleEnterSaveExit = () => {
-      // 这里的 handleSave 在 render 时可能指向旧函数，但 handleSave 本身只消费 refs / getState，
-      // 故闭包内直接调用总是能拿到最新状态。
-      handleSave();
-    };
-    window.addEventListener("goose-note:enter-save-exit", handleEnterSaveExit);
-    return () =>
-      window.removeEventListener("goose-note:enter-save-exit", handleEnterSaveExit);
-  }, []);
-
   // 强制置顶（无失焦自动隐藏）：小窗常驻最前层，置顶由主窗 preload 在创建时设定，
   // 失焦不再触发隐藏——点窗外不会收起，只能 Esc / 关闭按钮收起。
 
@@ -161,8 +151,7 @@ export function QuickNoteApp() {
   }, []);
 
   // 窗口位置记忆：用户拖动窗口移动 → 停下后记住最终位置，下次开窗沿用。
-  // window 无原生 move 事件，故低频轮询 screenX/screenY；坐标变化即重置「停下」计时，
-  // 停稳 280ms 后把当前屏幕坐标上报父窗持久化（移动不触发 resize，必须独立记忆）。
+  // 轮询间隔必须短于 settle 时间，否则拖动中会反复触发持久化 IPC，导致正文重绘抖动。
   useEffect(() => {
     let lastX = window.screenX;
     let lastY = window.screenY;
@@ -177,8 +166,8 @@ export function QuickNoteApp() {
       settleTimer = window.setTimeout(() => {
         settleTimer = null;
         quickNoteWindow.persistPosition(window.screenX, window.screenY);
-      }, 280);
-    }, 300);
+      }, POSITION_SETTLE_MS);
+    }, POSITION_POLL_MS);
     return () => {
       window.clearInterval(poll);
       if (settleTimer !== null) window.clearTimeout(settleTimer);
@@ -296,8 +285,14 @@ export function QuickNoteApp() {
           onContentChangeOverride={onDraftChange}
         >
           <div
-            className="quicknote-editor-surface flex min-h-full flex-col"
-            style={{ zoom } as CSSProperties}
+            className="quicknote-editor-surface quicknote-editor-scale flex min-h-full flex-col"
+            style={
+              {
+                "--quicknote-editor-zoom": zoom,
+                width: `${100 / zoom}%`,
+                minHeight: `${100 / zoom}%`,
+              } as CSSProperties
+            }
           >
             <Editor
               ref={editorRef}

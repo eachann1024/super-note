@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { usePages } from "@/stores/usePages";
 import { useNotebooks, DEFAULT_NOTEBOOK } from "@/stores/useNotebooks";
 import { useTabs } from "@/stores/useTabs";
+import { activateNotebook } from "@/lib/notebookNavigation";
 
 type WorkspaceDragIntent = "folder" | "text-file" | "file";
 
@@ -149,7 +150,7 @@ export function useFileDrop() {
       return;
     }
 
-    useNotebooks.getState().setActiveNotebook(targetNotebookId);
+    await activateNotebook(targetNotebookId);
     useTabs.getState().openTab(firstPageId);
     await usePages.getState().setActivePage(firstPageId);
     toast.success("文本文件已导入", {

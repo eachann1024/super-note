@@ -1,13 +1,24 @@
 import { useTabs } from "@/stores/useTabs";
+import { useNotebooks } from "@/stores/useNotebooks";
+import { usePages } from "@/stores/usePages";
 
 let suppressNextSidebarSelect = false;
 let suppressTimer: number | null = null;
+
+export function isLocalFolderDirectoryPage(pageId: string): boolean {
+  const page = usePages.getState().getPage(pageId);
+  if (!page?.isFolder) return false;
+  const notebook = useNotebooks.getState().notebooks[page.workspaceId];
+  return notebook?.source === "local-folder";
+}
 
 export function openPageFromSidebar(
   pageId: string,
   mode: "preview" | "permanent",
   options?: { pin?: boolean },
 ) {
+  if (isLocalFolderDirectoryPage(pageId)) return;
+
   const tabs = useTabs.getState();
   if (mode === "permanent") {
     suppressNextSidebarSelect = true;

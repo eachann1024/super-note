@@ -104,12 +104,18 @@ export async function recordHistorySnapshot(
   let nextVersions = [...index.versions, entry];
 
   if (nextVersions.length > MAX_VERSIONS_PER_PAGE) {
-    while (nextVersions.length > MAX_VERSIONS_PER_PAGE) {
-      const evictIdx = nextVersions.findIndex((v) => !v.isMilestone);
-      if (evictIdx === -1) break;
-      const evicted = nextVersions[evictIdx];
-      await backend.removeVersion(pageId, evicted.versionId);
-      nextVersions = nextVersions.filter((_, i) => i !== evictIdx);
+    const evictCount = nextVersions.length - MAX_VERSIONS_PER_PAGE;
+    const evictedVersionIds = nextVersions
+      .filter((v) => !v.isMilestone)
+      .slice(0, evictCount)
+      .map((v) => v.versionId);
+
+    if (evictedVersionIds.length > 0) {
+      const evictedSet = new Set(evictedVersionIds);
+      for (const versionId of evictedVersionIds) {
+        await backend.removeVersion(pageId, versionId);
+      }
+      nextVersions = nextVersions.filter((v) => !evictedSet.has(v.versionId));
     }
   }
 

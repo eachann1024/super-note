@@ -1,4 +1,16 @@
 import { getUToolsApi } from "./env";
+import type { LocalFolderOpenAppCandidate } from "@/lib/local-folder-open-apps";
+
+type GooseFsShellBridge = {
+  listAvailableOpenApps?: <T extends LocalFolderOpenAppCandidate>(candidates: T[]) => Promise<T[]>;
+  openWithApp?: (path: string, app: string) => Promise<boolean>;
+  openTerminalAtPath?: (path: string, terminal?: string) => Promise<boolean>;
+};
+
+const getGooseFsShellBridge = (): GooseFsShellBridge | null =>
+  typeof window !== "undefined"
+    ? (window as Window & { gooseFs?: GooseFsShellBridge }).gooseFs ?? null
+    : null;
 
 export const shell = {
   copyText: (text: string): void => {
@@ -56,8 +68,7 @@ export const shell = {
   },
 
   openWithEditor: async (filePath: string, editor: string): Promise<boolean> => {
-    type GooseFs = { openWithApp?: (f: string, e: string) => Promise<boolean> };
-    const gooseFs = (window as Window & { gooseFs?: GooseFs }).gooseFs;
+    const gooseFs = getGooseFsShellBridge();
     if (editor && gooseFs?.openWithApp) {
       try {
         return await gooseFs.openWithApp(filePath, editor);
@@ -66,6 +77,38 @@ export const shell = {
       }
     }
     return shell.openPath(filePath);
+  },
+
+  openWithApp: async (targetPath: string, app: string): Promise<boolean> => {
+    const gooseFs = getGooseFsShellBridge();
+    if (!app.trim() || !gooseFs?.openWithApp) return false;
+    try {
+      return await gooseFs.openWithApp(targetPath, app.trim());
+    } catch {
+      return false;
+    }
+  },
+
+  openTerminalAtPath: async (targetPath: string, terminal: string): Promise<boolean> => {
+    const gooseFs = getGooseFsShellBridge();
+    if (!gooseFs?.openTerminalAtPath) return false;
+    try {
+      return await gooseFs.openTerminalAtPath(targetPath, terminal.trim() || undefined);
+    } catch {
+      return false;
+    }
+  },
+
+  listAvailableOpenApps: async <T extends LocalFolderOpenAppCandidate>(
+    candidates: T[],
+  ): Promise<T[]> => {
+    const gooseFs = getGooseFsShellBridge();
+    if (!gooseFs?.listAvailableOpenApps) return [];
+    try {
+      return await gooseFs.listAvailableOpenApps(candidates);
+    } catch {
+      return [];
+    }
   },
 
   getDownloadsPath: (): string | null => {

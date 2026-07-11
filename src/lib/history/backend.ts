@@ -11,6 +11,7 @@ import { historyRepository } from "./repository";
 import { usePages } from "@/stores/usePages";
 import { useNotebooks } from "@/stores/useNotebooks";
 import type { HistoryIndex, HistoryVersion } from "./types";
+import { normalizeHistoryIndex, normalizeHistoryVersion } from "./guards";
 
 // ── 简单 FNV-1a (32-bit) ─────────────────────────────────────────────────────
 
@@ -133,11 +134,10 @@ function makeLocalFolderBackend(basePath: string): HistoryBackend {
   return {
     async loadIndex(pageId) {
       const data = await readJson<HistoryIndex>(indexPath(pageId));
-      // 校验 pageId 防碰撞
-      if (data && Array.isArray(data.versions) && data.pageId === pageId) {
-        return data;
+      if (data && data.pageId !== pageId) {
+        return { pageId, versions: [], lastVersionCharCount: 0 };
       }
-      return { pageId, versions: [], lastVersionCharCount: 0 };
+      return normalizeHistoryIndex(data, pageId);
     },
 
     saveIndex(index) {
@@ -149,7 +149,7 @@ function makeLocalFolderBackend(basePath: string): HistoryBackend {
 
     async loadVersion(pageId, versionId) {
       const data = await readJson<HistoryVersion>(versionPath(pageId, versionId));
-      return data ?? null;
+      return normalizeHistoryVersion(data, pageId, versionId);
     },
 
     saveVersion(version) {

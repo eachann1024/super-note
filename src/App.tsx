@@ -78,7 +78,25 @@ function App() {
     }
 
     restoreLastNoteIfNeeded();
-  }, [hydrated, privacy.autoOpenLastNote, restoreLastNoteIfNeeded, clearActivePageForBlankEntry]);
+  }, [hydrated, restoreLastNoteIfNeeded, clearActivePageForBlankEntry]);
+
+  useEffect(() => {
+    if (!hydrated || !privacy.autoCloseInactiveTabs) return;
+
+    const closeExpiredTabs = () => {
+      useTabs.getState().closeExpiredTabs();
+    };
+
+    closeExpiredTabs();
+    const timer = window.setInterval(closeExpiredTabs, 15 * 60 * 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [
+    hydrated,
+    privacy.autoCloseInactiveTabs,
+    privacy.autoCloseInactiveTabsHours,
+  ]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;

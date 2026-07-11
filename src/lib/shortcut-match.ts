@@ -16,12 +16,20 @@ function normalizeShortcutToken(raw: string) {
   if (token === "alt" || token === "option") return "alt";
   if (token === "shift") return "shift";
   if (token === "escape" || token === "esc") return "escape";
+  if (token === "+" || token === "plus") return "plus";
   if (token.length === 1) return token;
   return token;
 }
 
 function isModifierToken(token: string) {
   return token === "ctrl" || token === "meta" || token === "alt" || token === "shift";
+}
+
+export function shortcutHasModifier(shortcut: string) {
+  return shortcut
+    .split("+")
+    .map(normalizeShortcutToken)
+    .some(isModifierToken);
 }
 
 export function matchShortcut(event: KeyboardEvent, shortcut: string) {
@@ -52,9 +60,8 @@ export function matchShortcut(event: KeyboardEvent, shortcut: string) {
 
   const keyToken = parts.find((part) => !isModifierToken(part));
   const eventKey = normalizeShortcutToken(event.key);
-  if (!keyToken) {
-    return isModifierToken(eventKey) && expectedModifiers[eventKey as keyof typeof expectedModifiers];
-  }
+  // 旧版本可能持久化了 modifier-only 配置；它们不应劫持单独的修饰键。
+  if (!keyToken) return false;
   if (!isModifierToken(eventKey) && eventKey === keyToken) return true;
   // macOS 上 Option 组合键的 event.key 是变音字符（如 ⌥W → "∑"），用 event.code 兜底
   const code = event.code || "";

@@ -1,5 +1,9 @@
 import type { SearchProvider, PrivacySettings, CustomAction } from '../types'
-import { DEFAULT_SEARCH_PROVIDERS } from '../types'
+import {
+    AUTO_CLOSE_INACTIVE_TABS_HOURS_DEFAULT,
+    normalizeAutoCloseInactiveTabsHours,
+    DEFAULT_SEARCH_PROVIDERS,
+} from '../types'
 
 export interface SearchProvidersSliceState {
     searchProviders: SearchProvider[]
@@ -20,6 +24,8 @@ export interface SearchProvidersSliceActions {
     setShowRecentInSearch: (enabled: boolean) => void
     setNotebookDropdownHoverExpand: (enabled: boolean) => void
     setAutoOpenLastNote: (enabled: boolean) => void
+    setAutoCloseInactiveTabs: (enabled: boolean) => void
+    setAutoCloseInactiveTabsHours: (hours: number) => void
     addCustomAction: (action: Omit<CustomAction, 'id'>) => void
     updateCustomAction: (id: string, updates: Partial<Omit<CustomAction, 'id'>>) => void
     removeCustomAction: (id: string) => void
@@ -35,6 +41,8 @@ export const SEARCH_PROVIDERS_INITIAL_STATE: SearchProvidersSliceState = {
     notebookDropdownHoverExpand: false,
     privacy: {
         autoOpenLastNote: true,
+        autoCloseInactiveTabs: false,
+        autoCloseInactiveTabsHours: AUTO_CLOSE_INACTIVE_TABS_HOURS_DEFAULT,
     },
     customActions: [],
     dismissedNotices: {},
@@ -77,6 +85,17 @@ export function createSearchProvidersSlice(set: SetFn): SearchProvidersSlice {
         setAutoOpenLastNote: (enabled) =>
             set((state) => ({
                 privacy: { ...state.privacy, autoOpenLastNote: enabled },
+            })),
+        setAutoCloseInactiveTabs: (enabled) =>
+            set((state) => ({
+                privacy: { ...state.privacy, autoCloseInactiveTabs: enabled },
+            })),
+        setAutoCloseInactiveTabsHours: (hours) =>
+            set((state) => ({
+                privacy: {
+                    ...state.privacy,
+                    autoCloseInactiveTabsHours: normalizeAutoCloseInactiveTabsHours(hours),
+                },
             })),
         addCustomAction: (action) =>
             set((state) => ({

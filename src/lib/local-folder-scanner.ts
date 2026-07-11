@@ -32,6 +32,7 @@ interface LocalFolderScannerOptions {
   notebookId: string;
   basePath: string;
   gooseFs: GooseFs;
+  hiddenFolders?: string[];
 }
 
 interface LocalFolderEntry {
@@ -55,10 +56,21 @@ function normalizeLocalFileTitle(name: string) {
   const base = name.replace(/\.(md|markdown)$/i, "").trim();
   return base || "无标题";
 }
+export function shouldIgnoreEntry(name: string, hiddenFoldersSet: Set<string>) {
+  return name.startsWith(".") || IGNORED_FOLDERS.has(name) || hiddenFoldersSet.has(name);
+}
 
-
-function shouldIgnoreEntry(name: string) {
-  return name.startsWith(".") || IGNORED_FOLDERS.has(name);
+/** 增量 watch 使用：只要相对路径任一目录段命中扫描器规则，就忽略整条路径。 */
+export function shouldIgnoreLocalRelativePath(
+  relativePath: string,
+  hiddenFolders: readonly string[] = [],
+) {
+  const segments = relativePath
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter((segment) => segment && segment !== ".");
+  const hiddenFoldersSet = new Set(hiddenFolders);
+  return segments.some((segment) => shouldIgnoreEntry(segment, hiddenFoldersSet));
 }
 
 async function readDirectory(gooseFs: GooseFs, dirPath: string): Promise<LocalFolderEntry[]> {
@@ -223,12 +235,14 @@ export async function scanLocalFolderPages({
   notebookId,
   basePath,
   gooseFs,
+  hiddenFolders = [],
 }: LocalFolderScannerOptions): Promise<Page[]> {
   // 读取一次映射表，整个扫描过程共享（避免逐文件 IO）。
   const idMap: LocalPageIdMap = readLocalPageIdMap(notebookId);
   let idMapDirty = false;
   // 记录本次扫描实际存在的相对路径，用于扫描结束后剪枝。
   const liveRelativePaths = new Set<string>();
+  const hiddenFoldersSet = new Set(hiddenFolders);
 
   const scanDirectory = async (
     dirPath: string,
@@ -253,7 +267,7 @@ export async function scanLocalFolderPages({
     const pendingFiles: PendingFileEntry[] = [];
 
     for (const entry of entries) {
-      if (shouldIgnoreEntry(entry.name)) continue;
+      if (shouldIgnoreEntry(entry.name, hiddenFoldersSet)) continue;
 
       if (entry.isDirectory) {
         const relativePath = toRelativePath(basePath, entry.path);

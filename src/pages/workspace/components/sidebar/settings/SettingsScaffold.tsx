@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import type { SettingsTab, SettingsTabConfig } from "./types";
 
@@ -19,6 +19,37 @@ export function SettingsScaffold({
   feedbackBanner,
   appsBanner,
 }: SettingsScaffoldProps) {
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionsRef = useRef<Partial<Record<SettingsTab, number>>>({});
+  const previousActiveTabRef = useRef<SettingsTab>(activeTab);
+
+  useLayoutEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    const previousActiveTab = previousActiveTabRef.current;
+
+    if (!scrollContainer || previousActiveTab === activeTab) return;
+
+    scrollPositionsRef.current[previousActiveTab] = scrollContainer.scrollTop;
+    scrollContainer.scrollTop = scrollPositionsRef.current[activeTab] ?? 0;
+    previousActiveTabRef.current = activeTab;
+  }, [activeTab]);
+
+  const handleTabChange = (tab: SettingsTab) => {
+    const scrollContainer = scrollContainerRef.current;
+    if (scrollContainer) {
+      scrollPositionsRef.current[activeTab] = scrollContainer.scrollTop;
+    }
+
+    onTabChange(tab);
+  };
+
+  const handleScroll = () => {
+    const scrollContainer = scrollContainerRef.current;
+    if (scrollContainer) {
+      scrollPositionsRef.current[activeTab] = scrollContainer.scrollTop;
+    }
+  };
+
   return (
     <div className="workspace-shell flex h-full flex-col bg-[hsl(var(--goose-shell-bg))] text-foreground">
       <div className="flex h-14 items-center justify-between bg-[hsl(var(--goose-shell-bg))] pt-4 px-6 pr-14">
@@ -44,7 +75,7 @@ export function SettingsScaffold({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => onTabChange(tab.id)}
+                  onClick={() => handleTabChange(tab.id)}
                   className={cn(
                     "h-auto w-full justify-start gap-3 rounded-[10px] px-3 py-2.5 text-sm transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     activeTab === tab.id
@@ -69,7 +100,11 @@ export function SettingsScaffold({
 
         <div className="workspace-main-sheet flex-1 overflow-hidden rounded-[18px]">
           <div className="workspace-editor-surface h-full overflow-hidden rounded-[16px]">
-            <div className="h-full overflow-y-auto p-6">
+            <div
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
+              className="h-full overflow-y-auto p-6"
+            >
               <div className="mx-auto w-full max-w-5xl">{children}</div>
             </div>
           </div>

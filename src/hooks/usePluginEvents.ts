@@ -1,12 +1,14 @@
 import { useEffect } from "react";
+import {
+  activateNotebook,
+  resolveNotebookLandingPageId,
+} from "@/lib/notebookNavigation";
 import { UToolsAdapter } from "@/lib/utools";
 import { useSettings } from "@/stores/useSettings";
-import { useNotebooks } from "@/stores/useNotebooks";
+import { DEFAULT_NOTEBOOK, useNotebooks } from "@/stores/useNotebooks";
 import { usePages } from "@/stores/usePages";
 import { useTabs } from "@/stores/useTabs";
 import { fs } from "@/lib/utools/fs";
-
-const DEFAULT_NOTEBOOK = "default-notebook";
 
 type UToolsPluginEnterDetail = {
   code?: string;
@@ -22,40 +24,13 @@ const applyUToolsWindowHeight = () => {
   }
 };
 
-const resolveRestorablePageId = () => {
-  const notebooksStore = useNotebooks.getState();
-  const pagesStore = usePages.getState();
-  const activeNotebookId = notebooksStore.activeNotebookId;
-  if (!activeNotebookId) return null;
-
-  const pages = pagesStore.pages;
-  const lastPageId = notebooksStore.getLastActivePage(activeNotebookId);
-  const lastPage = lastPageId ? pages[lastPageId] : null;
-  if (
-    lastPage &&
-    lastPage.workspaceId === activeNotebookId &&
-    !lastPage.trashedAt
-  ) {
-    return lastPageId;
-  }
-
-  const activeNotebook = notebooksStore.notebooks[activeNotebookId];
-  if (activeNotebook?.source === "local-folder") {
-    return null;
-  }
-
-  const firstValidPage = Object.values(pages)
-    .filter((page) => page.workspaceId === activeNotebookId && !page.trashedAt)
-    .sort((a, b) => (a.order ?? a.createdAt) - (b.order ?? b.createdAt))[0];
-
-  return firstValidPage?.id ?? null;
-};
-
 const restoreLastNoteIfNeeded = () => {
   const pagesStore = usePages.getState();
   if (pagesStore.activePageId) return;
 
-  const targetPageId = resolveRestorablePageId();
+  const targetPageId = resolveNotebookLandingPageId(
+    useNotebooks.getState().activeNotebookId,
+  );
   if (!targetPageId) return;
 
   useTabs.getState().openTab(targetPageId);
@@ -85,6 +60,10 @@ export function usePluginEvents() {
       applyUToolsWindowHeight();
 
       if (!usePages.getState().hydrated) return;
+      // uTools 退出插件时通常只会隐藏窗口，React 不会重新挂载，后台定时器也可能
+      // 被 Chromium 降频。因此每次重新进入插件都主动清理一次过期标签。
+      // 这项清理独立于“自动打开上次笔记”，也应覆盖 open_folder / new_page 入口。
+      useTabs.getState().closeExpiredTabs();
       if (!useSettings.getState().privacy.autoOpenLastNote) return;
       if (code === "open_folder" || code === "new_page") return;
 
@@ -286,20 +265,7 @@ export function usePluginEvents() {
           notebooks.find((notebook) => !notebook.localPathMissing) ||
           notebooks[0];
         if (nextNotebook && nextNotebook.id !== activeNotebookId) {
-          notebooksStore.setActiveNotebook(nextNotebook.id);
-          const lastPageId = notebooksStore.getLastActivePage(nextNotebook.id);
-          const { pages } = pagesStore;
-          const lastPage = lastPageId ? pages[lastPageId] : null;
-          if (lastPage && !lastPage.trashedAt) {
-            pagesStore.setActivePage(lastPageId);
-          } else {
-            const firstValidPage = Object.values(pages)
-              .filter((p) => p.workspaceId === nextNotebook.id && !p.trashedAt)
-              .sort(
-                (a, b) => (a.order ?? a.createdAt) - (b.order ?? b.createdAt),
-              )[0];
-            pagesStore.setActivePage(firstValidPage?.id ?? null);
-          }
+          await activateNotebook(nextNotebook.id);
         }
       }
     })();

@@ -1,20 +1,18 @@
 import { NotebookCreateDialog } from "./NotebookCreateDialog";
 import { NotebookEditDialog } from "./NotebookEditDialog";
 import { renderNotebookIcon } from "./notebookUtils";
+import { activateNotebook } from "@/lib/notebookNavigation";
 import { dialogs } from "@/lib/utools/dialogs";
 
 export function NotebookSwitcher() {
   const {
     notebooks,
     activeNotebookId,
-    setActiveNotebook,
     createNotebook,
     createLocalFolderNotebook,
     updateNotebook,
     deleteNotebook,
-    getLastActivePage,
   } = useNotebooks();
-  const { setActivePage } = usePages();
   const notebookDropdownHoverExpand = useSettings(
     (state) => state.notebookDropdownHoverExpand,
   );
@@ -79,21 +77,26 @@ export function NotebookSwitcher() {
       return;
     }
 
-    createNotebook(createDialog.name.trim(), createDialog.icon);
-    setActivePage(null);
+    const notebookId = createNotebook(
+      createDialog.name.trim(),
+      createDialog.icon,
+    );
+    void activateNotebook(notebookId);
     setCreateDialog({ open: false, name: "", icon: "BookOpen", error: "" });
   };
 
   const handleOpenLocalFolder = async () => {
     try {
-      const utools = (window as Window & {
-        utools?: {
-          showOpenDialog?: (options: {
-            title?: string;
-            properties: string[];
-          }) => Promise<string[] | null>;
-        };
-      }).utools;
+      const utools = (
+        window as Window & {
+          utools?: {
+            showOpenDialog?: (options: {
+              title?: string;
+              properties: string[];
+            }) => Promise<string[] | null>;
+          };
+        }
+      ).utools;
       if (typeof utools?.showOpenDialog === "function") {
         const result = await utools.showOpenDialog({
           title: "选择 Markdown 文件夹",
@@ -107,21 +110,17 @@ export function NotebookSwitcher() {
             .loadLocalFolderPages(notebookId, result[0], {
               showWelcome: true,
             });
-          setActiveNotebook(notebookId);
-          setActivePage(null);
+          void activateNotebook(notebookId);
         }
       } else {
         const path = await dialogs.selectDirectory();
         if (path) {
           const folderName = path.split(/[\\/]/).pop() || "Unknown";
           const notebookId = createLocalFolderNotebook(folderName, path);
-          await usePages
-            .getState()
-            .loadLocalFolderPages(notebookId, path, {
-              showWelcome: true,
-            });
-          setActiveNotebook(notebookId);
-          setActivePage(null);
+          await usePages.getState().loadLocalFolderPages(notebookId, path, {
+            showWelcome: true,
+          });
+          void activateNotebook(notebookId);
         }
       }
     } catch (e) {
@@ -140,7 +139,9 @@ export function NotebookSwitcher() {
       id,
       name: notebook.name,
       confirmName: notebook.name,
-      icon: notebook.icon || (notebook.source === "local-folder" ? "FolderOpen" : "BookOpen"),
+      icon:
+        notebook.icon ||
+        (notebook.source === "local-folder" ? "FolderOpen" : "BookOpen"),
       openDeleteConfirm: false,
       isLocalFolder: notebook.source === "local-folder",
     });
@@ -187,7 +188,10 @@ export function NotebookSwitcher() {
               <div className="flex items-center gap-2 truncate min-w-0">
                 {activeNotebook && (
                   <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center text-foreground/70 text-[16px] leading-none">
-                    {renderNotebookIcon(activeNotebook.icon || "BookOpen", "h-[18px] w-[18px] leading-none")}
+                    {renderNotebookIcon(
+                      activeNotebook.icon || "BookOpen",
+                      "h-[18px] w-[18px] leading-none",
+                    )}
                   </span>
                 )}
                 {/* leading-snug：truncate(overflow hidden) 配 leading-none 会裁掉 g/y/p 降部 */}
@@ -227,23 +231,7 @@ export function NotebookSwitcher() {
               )}
               onClick={() => {
                 if (notebook.localPathMissing) return;
-                setActiveNotebook(notebook.id);
-                const lastPageId = getLastActivePage(notebook.id);
-                const { pages } = usePages.getState();
-                const lastPage = lastPageId ? pages[lastPageId] : null;
-                if (lastPage && !lastPage.trashedAt) {
-                  setActivePage(lastPageId);
-                } else {
-                  const firstValidPage = Object.values(pages)
-                    .filter(
-                      (p) => p.workspaceId === notebook.id && !p.trashedAt,
-                    )
-                    .sort(
-                      (a, b) =>
-                        (a.order ?? a.createdAt) - (b.order ?? b.createdAt),
-                    )[0];
-                  setActivePage(firstValidPage?.id ?? null);
-                }
+                void activateNotebook(notebook.id);
                 setIsOpen(false);
               }}
             >
@@ -258,7 +246,9 @@ export function NotebookSwitcher() {
                 >
                   {renderNotebookIcon(notebook.icon || "BookOpen", "h-4 w-4")}
                 </span>
-                <span className="truncate text-sm font-medium leading-snug">{notebook.name}</span>
+                <span className="truncate text-sm font-medium leading-snug">
+                  {notebook.name}
+                </span>
                 {notebook.localPathMissing && (
                   <span className="text-xs text-destructive">路径失效</span>
                 )}
@@ -276,12 +266,14 @@ export function NotebookSwitcher() {
                             e.stopPropagation();
                             deleteNotebook(notebook.id);
                           }}
-                          aria-label="删除本地记事本"
+                          aria-label="移除本地文件夹"
                         >
-                          <LucideIcons.Trash2 className="h-3.5 w-3.5" />
+                          <LucideIcons.FolderX className="h-3.5 w-3.5" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom">删除本地记事本</TooltipContent>
+                      <TooltipContent side="bottom">
+                        移除本地文件夹
+                      </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}
@@ -359,7 +351,8 @@ export function NotebookSwitcher() {
           onIconChange={(icon) => setCreateDialog({ ...createDialog, icon })}
           onCreate={handleConfirmCreate}
           onClearError={() =>
-            createDialog.error && setCreateDialog({ ...createDialog, error: "" })
+            createDialog.error &&
+            setCreateDialog({ ...createDialog, error: "" })
           }
         />
       )}

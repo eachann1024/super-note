@@ -34,6 +34,7 @@ export const Font = {
 // ESM 具名 import 要求被 import 的符号存在，否则链接报错；这些全是 stub，
 // 因小窗里 AI 用法已被 __GOOSE_LITE__ 门控为死代码，运行时不会真正调用。
 export const AIExtension = stub;
+export const AIMenu = stub;
 export const AIMenuController = stub;
 export const ClientSideTransport = stub;
 export const aiDocumentFormats = stub;

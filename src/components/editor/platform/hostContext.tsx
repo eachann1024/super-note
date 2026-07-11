@@ -44,7 +44,6 @@ export interface EditorSettings {
   customActions: CustomAction[];
   /** 宿主提供的 redirect 能力（uTools 端：UToolsAdapter.redirect；Tauri 端：noop） */
   redirectAction?: (label: string | [string, string], payload?: unknown) => void;
-  enterKeyBehavior: 'create-block' | 'save-exit';
 }
 
 /** 宿主透传给编辑器的「当前页 + 跨页能力」（替换对 usePages/useNotebooks/useTabs 的直读）。 */

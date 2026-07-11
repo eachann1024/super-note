@@ -10,12 +10,18 @@ type LocalPageInfo = {
 
 type PagesState = {
   pages: Record<string, LocalPageInfo>;
+  activePageId: string | null;
   createLocalPage: (
     parentId?: string,
     workspaceId?: string,
   ) => Promise<string | null>;
   renameLocalPageFile: (pageId: string, newBaseName: string) => Promise<string>;
   saveLocalPageContent: (pageId: string, content: unknown) => Promise<boolean>;
+};
+
+type TabsState = {
+  openTabs: Array<{ pageId: string; preview?: boolean; pinned?: boolean }>;
+  activeTabId: string | null;
 };
 
 type LocalHarness = {
@@ -29,6 +35,10 @@ type LocalHarness = {
           | Partial<PagesState>
           | ((state: PagesState) => Partial<PagesState>),
       ) => void;
+    };
+    useTabs: {
+      getState: () => TabsState;
+      setState: (partial: Partial<TabsState>) => void;
     };
   };
 };
@@ -49,9 +59,87 @@ test.describe("local folder stable page ids", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       (window as LocalHarnessWindow).__GOOSE_E2E__ = true;
+      window.localStorage.setItem(
+        "goose-note-settings",
+        JSON.stringify({ state: { hideExpandArrows: true }, version: 0 }),
+      );
     });
     await page.goto("/?e2eLocalMock");
     await waitForLocalHarness(page);
+  });
+
+  test("clicking a local folder row toggles it without opening an editor tab", async ({
+    page,
+  }) => {
+    const { folderId, nestedFileId } = await page.evaluate(async () => {
+      const harness = (window as LocalHarnessWindow).__gooseTest;
+      if (!harness) throw new Error("Local folder harness unavailable");
+
+      const { notebookId } = await harness.setupMockNotebook();
+      harness.stores.useTabs.setState({ openTabs: [], activeTabId: null });
+      harness.stores.usePages.setState({ activePageId: null });
+
+      const pages = harness.stores.usePages.getState().pages;
+      const folder = Object.values(pages).find(
+        (page) =>
+          page.workspaceId === notebookId &&
+          page.isFolder &&
+          page.localFilePath === "/mock-notes/sub",
+      );
+      const nestedFile = Object.values(pages).find(
+        (page) =>
+          page.workspaceId === notebookId &&
+          !page.isFolder &&
+          page.localFilePath === "/mock-notes/sub/nested.md",
+      );
+      if (!folder || !nestedFile) {
+        throw new Error("Expected mock folder fixture not found");
+      }
+
+      return { folderId: folder.id, nestedFileId: nestedFile.id };
+    });
+
+    const folderRow = page.locator(`[data-rct-item-id="${folderId}"]`).first();
+    const nestedFileRow = page.locator(`[data-rct-item-id="${nestedFileId}"]`);
+
+    await expect(folderRow).toBeVisible({ timeout: 15_000 });
+    await expect(nestedFileRow).toBeHidden();
+
+    await folderRow.click({ position: { x: 100, y: 14 } });
+    await expect(nestedFileRow).toBeVisible();
+
+    const afterExpand = await page.evaluate(() => {
+      const harness = (window as LocalHarnessWindow).__gooseTest;
+      if (!harness) throw new Error("Local folder harness unavailable");
+      const tabs = harness.stores.useTabs.getState();
+      const pages = harness.stores.usePages.getState();
+      return {
+        openTabs: tabs.openTabs,
+        activeTabId: tabs.activeTabId,
+        activePageId: pages.activePageId,
+      };
+    });
+    expect(afterExpand.openTabs).toHaveLength(0);
+    expect(afterExpand.activeTabId).toBeNull();
+    expect(afterExpand.activePageId).toBeNull();
+
+    await folderRow.click({ position: { x: 100, y: 14 } });
+    await expect(nestedFileRow).toBeHidden();
+
+    const afterCollapse = await page.evaluate(() => {
+      const harness = (window as LocalHarnessWindow).__gooseTest;
+      if (!harness) throw new Error("Local folder harness unavailable");
+      const tabs = harness.stores.useTabs.getState();
+      const pages = harness.stores.usePages.getState();
+      return {
+        openTabs: tabs.openTabs,
+        activeTabId: tabs.activeTabId,
+        activePageId: pages.activePageId,
+      };
+    });
+    expect(afterCollapse.openTabs).toHaveLength(0);
+    expect(afterCollapse.activeTabId).toBeNull();
+    expect(afterCollapse.activePageId).toBeNull();
   });
 
   test("recreating 新页面 after renaming it keeps both files in the page list", async ({

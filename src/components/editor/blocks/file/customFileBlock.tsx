@@ -46,7 +46,7 @@ function CustomFileBlockContent({
       try {
         triggerDownload(objectUrl, name);
       } finally {
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
       }
       return;
     }

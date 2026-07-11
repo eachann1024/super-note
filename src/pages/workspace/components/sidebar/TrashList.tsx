@@ -1,29 +1,31 @@
-import { formatDistanceToNow } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
+import { formatDistanceToNow } from "date-fns";
+import { zhCN } from "date-fns/locale";
 import { getPageTitle } from "@/components/editor/utils/page-title";
-import { useEffect } from 'react';
+import { useEffect } from "react";
 
 interface TrashListProps {
-  onBack?: () => void
-  showHeader?: boolean
-  itemHeight?: number
+  onBack?: () => void;
+  showHeader?: boolean;
+  itemHeight?: number;
+  selectedPageId?: string | null;
+  onSelectPage?: (pageId: string | null) => void;
 }
 
 function nodeHasVisibleContent(node: unknown): boolean {
-  if (!node || typeof node !== "object") return false
+  if (!node || typeof node !== "object") return false;
   const value = node as {
-    text?: unknown
-    content?: unknown
-    type?: unknown
-  }
+    text?: unknown;
+    content?: unknown;
+    type?: unknown;
+  };
 
   if (typeof value.text === "string" && value.text.trim().length > 0) {
-    return true
+    return true;
   }
 
-  const children = Array.isArray(value.content) ? value.content : []
+  const children = Array.isArray(value.content) ? value.content : [];
   if (children.some((child: unknown) => nodeHasVisibleContent(child))) {
-    return true
+    return true;
   }
 
   if (
@@ -33,28 +35,60 @@ function nodeHasVisibleContent(node: unknown): boolean {
     value.type === "text" ||
     value.type === "hardBreak"
   ) {
-    return false
+    return false;
   }
 
-  return typeof value.type === "string" && value.type.length > 0
+  return typeof value.type === "string" && value.type.length > 0;
 }
 
-function pageHasVisibleContent(page: { content?: unknown } | null | undefined): boolean {
-  return nodeHasVisibleContent(page?.content)
+function pageHasVisibleContent(
+  page: { content?: unknown } | null | undefined,
+): boolean {
+  return nodeHasVisibleContent(page?.content);
 }
 
-export function TrashList({ onBack, showHeader = true, itemHeight = 52 }: TrashListProps) {
-  const { getTrashedPages, setActivePage, activePageId } = usePages()
-  const { activeNotebookId } = useNotebooks()
+export function TrashList({
+  onBack,
+  showHeader = true,
+  itemHeight = 52,
+  selectedPageId,
+  onSelectPage,
+}: TrashListProps) {
+  const { getTrashedPages, setActivePage, activePageId } = usePages();
+  const { activeNotebookId } = useNotebooks();
 
-  const trashedPages = getTrashedPages(activeNotebookId || undefined)
+  const trashedPages = getTrashedPages(activeNotebookId || undefined);
+  const selectedPageExists =
+    !!selectedPageId && trashedPages.some((page) => page.id === selectedPageId);
+  const activePageExists =
+    !!activePageId && trashedPages.some((page) => page.id === activePageId);
+  const highlightedPageId = selectedPageExists
+    ? selectedPageId
+    : activePageExists
+      ? activePageId
+      : null;
 
-  // 默认选中第一个文件
+  // 回收站自己的选中态与 activePage 分开维护，保证本地文件夹/空编辑区场景也有高亮反馈。
   useEffect(() => {
-    if (trashedPages.length > 0 && !activePageId) {
-      setActivePage(trashedPages[0].id)
+    if (trashedPages.length === 0) {
+      onSelectPage?.(null);
+      return;
     }
-  }, [trashedPages, activePageId, setActivePage])
+
+    if (highlightedPageId) return;
+
+    const nextPageId = trashedPages[0].id;
+    onSelectPage?.(nextPageId);
+    if (activePageId !== nextPageId) {
+      setActivePage(nextPageId);
+    }
+  }, [
+    activePageId,
+    highlightedPageId,
+    onSelectPage,
+    setActivePage,
+    trashedPages,
+  ]);
 
   return (
     <div className="flex flex-col h-full">
@@ -86,13 +120,16 @@ export function TrashList({ onBack, showHeader = true, itemHeight = 52 }: TrashL
         ) : (
           <div className="px-2 pb-10 pt-0.5 space-y-px">
             {trashedPages.map((page) => {
-              const iconName = page.icon
+              const iconName = page.icon;
               const DefaultPageIcon = pageHasVisibleContent(page)
                 ? LucideIcons.FileText
-                : LucideIcons.File
+                : LucideIcons.File;
               const timeAgo = page.trashedAt
-                ? formatDistanceToNow(page.trashedAt, { addSuffix: true, locale: zhCN })
-                : ''
+                ? formatDistanceToNow(page.trashedAt, {
+                    addSuffix: true,
+                    locale: zhCN,
+                  })
+                : "";
 
               return (
                 <div
@@ -100,19 +137,22 @@ export function TrashList({ onBack, showHeader = true, itemHeight = 52 }: TrashL
                   style={{ height: itemHeight }}
                   className={cn(
                     "group relative flex items-center gap-2 rounded-[8px] px-4 cursor-pointer transition-colors duration-200 overflow-hidden text-sm font-medium",
-                    activePageId === page.id
+                    highlightedPageId === page.id
                       ? "bg-[var(--goose-interactive-selected)] text-foreground"
                       : "text-muted-foreground dark:text-muted-foreground/65 hover:bg-[var(--goose-interactive-hover)] hover:text-foreground dark:hover:text-foreground/92",
                   )}
-                  onClick={() => setActivePage(page.id)}
+                  onClick={() => {
+                    onSelectPage?.(page.id);
+                    setActivePage(page.id);
+                  }}
                 >
                   {/* 图标 */}
                   {iconName ? (
                     <div className="h-4 w-4 shrink-0 flex items-center justify-center">
                       {(LucideIcons as any)[iconName] ? (
                         (() => {
-                          const Icon = (LucideIcons as any)[iconName]
-                          return <Icon className="h-4 w-4" />
+                          const Icon = (LucideIcons as any)[iconName];
+                          return <Icon className="h-4 w-4" />;
                         })()
                       ) : (
                         <span className="text-xs">{iconName}</span>
@@ -132,7 +172,7 @@ export function TrashList({ onBack, showHeader = true, itemHeight = 52 }: TrashL
                     </div>
                   </div>
                 </div>
-              )
+              );
             })}
           </div>
         )}
@@ -145,5 +185,5 @@ export function TrashList({ onBack, showHeader = true, itemHeight = 52 }: TrashL
         </div>
       )}
     </div>
-  )
+  );
 }

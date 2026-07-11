@@ -1,12 +1,17 @@
 import type { Page } from "@/types";
 import { useNotebooks } from "../../../useNotebooks";
 import { useTabs } from "../../../useTabs";
+import { useSettings } from "@/stores/useSettings";
 import {
   scanLocalFolderPages,
   parseLocalMarkdownContent,
   localFileTitleFromPath,
+  shouldIgnoreLocalRelativePath,
 } from "@/lib/local-folder-scanner";
-import { setLocalMdSnapshot, deleteLocalMdSnapshot } from "@/lib/local-md-snapshot";
+import {
+  setLocalMdSnapshot,
+  deleteLocalMdSnapshot,
+} from "@/lib/local-md-snapshot";
 import {
   readLocalPageIdMap,
   resolveOrCreateStableId,
@@ -38,11 +43,11 @@ export const reloadLocalPageFromDiskAction = async (
   try {
     if (fs.readFileStatAsync) {
       const result = await fs.readFileStatAsync(filePath);
-      markdown = result.ok ? result.content ?? "" : null;
+      markdown = result.ok ? (result.content ?? "") : null;
       readError = result.error || undefined;
     } else if (fs.readFileStat) {
       const result = fs.readFileStat(filePath);
-      markdown = result.ok ? result.content ?? "" : null;
+      markdown = result.ok ? (result.content ?? "") : null;
       readError = result.error || undefined;
     } else if (fs.readFileAsync) {
       markdown = await fs.readFileAsync(filePath);
@@ -140,6 +145,7 @@ export const loadLocalFolderPagesAction = async (
       notebookId,
       basePath,
       gooseFs: window.gooseFs,
+      hiddenFolders: useSettings.getState().localFolderHiddenFolders,
     });
 
     set((state) => {
@@ -189,15 +195,16 @@ export const loadLocalFolderPagesAction = async (
       if (!handledNavigation) {
         const activeNotebookId = useNotebooks.getState().activeNotebookId;
         if (activeNotebookId === notebookId) {
-          const autoOpenLastNote =
-            typeof window !== "undefined"
-              ? (window as any).__gooseNoteAutoOpenLastNote !== false
-              : true;
-          const allowAutoRestore = autoOpenLastNote === true;
           const notebook = useNotebooks.getState().notebooks[notebookId];
           const isLocalFolder = notebook?.source === "local-folder";
 
-          if (allowAutoRestore || !isLocalFolder) {
+          if (isLocalFolder) {
+            // 隐藏目录设置变化后，当前页可能已不在重扫结果里；不能保留悬空 activePageId。
+            if (nextActivePageId && !updated[nextActivePageId]) {
+              result.activePageId = null;
+              result.expandPageId = null;
+            }
+          } else {
             const lastActivePageId = useNotebooks
               .getState()
               .getLastActivePage(notebookId);
@@ -210,13 +217,11 @@ export const loadLocalFolderPagesAction = async (
               pageIdSet.has(previousActiveInNotebook)
             ) {
               nextActivePageId = previousActiveInNotebook;
-            } else if (!isLocalFolder) {
+            } else {
               const firstPage = localPages
                 .filter((p) => !p.trashedAt)
                 .sort(
-                  (a, b) =>
-                    (a.order ?? a.createdAt) -
-                    (b.order ?? b.createdAt),
+                  (a, b) => (a.order ?? a.createdAt) - (b.order ?? b.createdAt),
                 )[0];
               if (firstPage) {
                 nextActivePageId = firstPage.id;
@@ -231,20 +236,9 @@ export const loadLocalFolderPagesAction = async (
       }
 
       if (options?.showWelcome) {
-        // 打开本地文件夹后：文件夹内有笔记则直接定位到首篇（按 order/创建时间），
-        // 只有真正的空文件夹才回落到欢迎空状态。修复「加了文件夹却仍停在新建引导」。
-        const firstPage = localPages
-          .filter((p) => !p.trashedAt)
-          .sort(
-            (a, b) => (a.order ?? a.createdAt) - (b.order ?? b.createdAt),
-          )[0];
-        if (firstPage) {
-          result.activePageId = firstPage.id;
-          result.expandPageId = firstPage.id;
-        } else {
-          result.activePageId = null;
-          result.expandPageId = null;
-        }
+        // 打开/切换到本地文件夹时保持空白入口，不自动打开首篇。
+        result.activePageId = null;
+        result.expandPageId = null;
         result.pendingNavigatePageId = null;
       }
 
@@ -259,7 +253,6 @@ export const loadLocalFolderPagesAction = async (
       if (activeNotebookId === notebookId && currentActive) {
         useNotebooks.getState().setLastActivePage(notebookId, currentActive);
       }
-
       return result;
     });
   } finally {
@@ -289,7 +282,9 @@ export const removeSingleLocalPageAction = (
 ): void => {
   const pages = get().pages;
   const target = Object.values(pages).find(
-    (p) => p.localFilePath === filePath || p.localFilePath?.replace(/\\/g, "/") === filePath.replace(/\\/g, "/"),
+    (p) =>
+      p.localFilePath === filePath ||
+      p.localFilePath?.replace(/\\/g, "/") === filePath.replace(/\\/g, "/"),
   );
   if (!target) return;
 
@@ -349,6 +344,14 @@ export const addSingleLocalPageAction = async (
 
   const fallbackTitle = localFileTitleFromPath(filePath);
   const relativePath = toRelativePath(basePath, filePath);
+  if (
+    shouldIgnoreLocalRelativePath(
+      relativePath,
+      useSettings.getState().localFolderHiddenFolders,
+    )
+  ) {
+    return;
+  }
   const idMap = readLocalPageIdMap(notebookId);
   const { id: pageId, dirty } = resolveOrCreateStableId(
     notebookId,
@@ -380,7 +383,11 @@ export const addSingleLocalPageAction = async (
     return;
   }
 
-  const parsed = await parseLocalMarkdownContent(markdown, fallbackTitle, readError);
+  const parsed = await parseLocalMarkdownContent(
+    markdown,
+    fallbackTitle,
+    readError,
+  );
 
   // 记录快照
   if (typeof markdown === "string") {
@@ -406,11 +413,19 @@ export const addSingleLocalPageAction = async (
     localReadError: parsed.readError,
     createdAt: now,
     updatedAt: now,
-    ...(cachedMeta?.isFavorite !== undefined && { isFavorite: cachedMeta.isFavorite }),
-    ...(cachedMeta?.favoriteOrder !== undefined && { favoriteOrder: cachedMeta.favoriteOrder }),
+    ...(cachedMeta?.isFavorite !== undefined && {
+      isFavorite: cachedMeta.isFavorite,
+    }),
+    ...(cachedMeta?.favoriteOrder !== undefined && {
+      favoriteOrder: cachedMeta.favoriteOrder,
+    }),
     ...(cachedMeta?.icon && { icon: cachedMeta.icon }),
-    ...(cachedMeta?.isPinned !== undefined && { isPinned: cachedMeta.isPinned }),
-    ...(cachedMeta?.pinnedAt !== undefined && { pinnedAt: cachedMeta.pinnedAt }),
+    ...(cachedMeta?.isPinned !== undefined && {
+      isPinned: cachedMeta.isPinned,
+    }),
+    ...(cachedMeta?.pinnedAt !== undefined && {
+      pinnedAt: cachedMeta.pinnedAt,
+    }),
   };
 
   set((state) => ({

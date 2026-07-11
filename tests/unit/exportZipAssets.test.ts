@@ -1,6 +1,10 @@
 import { expect, test } from "playwright/test";
 import JSZip from "jszip";
-import { generateExportZip, importNotebooksFromZip } from "../../src/lib/export";
+import {
+  generateExportZip,
+  importNotebooksFromZip,
+  inspectNotebookImportZip,
+} from "../../src/lib/export";
 import type { Page } from "../../src/types";
 
 const notebookId = "notebook-export";
@@ -118,6 +122,65 @@ function installAttachmentRuntime(onGetAttachment?: (id: string) => void) {
     },
   };
   (globalThis as any).FileReader = TestFileReader;
+}
+
+function installDbRuntime() {
+  let rev = 0;
+  const docs = new Map<string, { _id: string; _rev: string; data: any }>();
+  const dbStorage = new Map<string, string>();
+  const classes = new Set<string>();
+
+  (globalThis as any).document = {
+    documentElement: {
+      classList: {
+        add: (className: string) => classes.add(className),
+        remove: (className: string) => classes.delete(className),
+        contains: (className: string) => classes.has(className),
+      },
+      setAttribute: () => undefined,
+      removeAttribute: () => undefined,
+    },
+  };
+
+  (globalThis as any).window = {
+    matchMedia: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+    localStorage: {
+      getItem: (key: string) => dbStorage.get(key) ?? null,
+      setItem: (key: string, value: string) => dbStorage.set(key, value),
+      removeItem: (key: string) => dbStorage.delete(key),
+    },
+    utools: {
+      db: {
+        get: (id: string) => docs.get(id) ?? null,
+        put: (doc: { _id: string; _rev?: string; data: unknown }) => {
+          const nextRev = `rev-${++rev}`;
+          docs.set(doc._id, { _id: doc._id, _rev: nextRev, data: doc.data });
+          return { id: doc._id, ok: true, rev: nextRev };
+        },
+        remove: (id: string) => {
+          docs.delete(id);
+          return { id, ok: true };
+        },
+        allDocs: (prefix = "") =>
+          Array.from(docs.values()).filter((doc) => doc._id.startsWith(prefix)),
+      },
+      dbStorage: {
+        getItem: (key: string) => dbStorage.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          dbStorage.set(key, value);
+        },
+        removeItem: (key: string) => {
+          dbStorage.delete(key);
+        },
+      },
+    },
+  };
+
+  return { docs };
 }
 
 function buildPage(): Page {
@@ -294,6 +357,120 @@ test("importNotebooksFromZip restores metadata asset refs to portable data URLs"
   );
 });
 
+test("importNotebooksFromZip keeps external urls that contain assets path", async () => {
+  const zip = new JSZip();
+  const externalUrl = "https://example.com/assets/shared.png";
+  zip.file(
+    "backup-metadata.json",
+    JSON.stringify({
+      version: 1,
+      notebooks: [{ id: notebookId, name: "Notebook", icon: "BookOpen" }],
+      pages: [
+        {
+          id: "external-assets-url",
+          workspaceId: notebookId,
+          isFolder: false,
+          content: [
+            {
+              type: "image",
+              props: {
+                url: externalUrl,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  zip.file("Notebook/assets/shared.png", "aW1wb3J0ZWQ=", { base64: true });
+
+  const importedPages: Array<Partial<Page>> = [];
+  await importNotebooksFromZip(
+    (await zip.generateAsync({ type: "arraybuffer" })) as unknown as Blob,
+    (_name, _icon, id) => id ?? notebookId,
+    async (data) => {
+      importedPages.push(data);
+      return data.id ?? "page-imported";
+    },
+  );
+
+  const importedContent = importedPages[0].content as any[];
+  expect(importedContent[0].props.url).toBe(externalUrl);
+});
+
+test("importNotebooksFromZip scrubs local paths and remaps history to created page id", async () => {
+  const { docs } = installDbRuntime();
+  const zip = new JSZip();
+  zip.file(
+    "backup-metadata.json",
+    JSON.stringify({
+      version: 1,
+      notebooks: [{ id: notebookId, name: "Notebook", icon: "BookOpen" }],
+      pages: [
+        {
+          id: "source-page",
+          workspaceId: notebookId,
+          isFolder: false,
+          localFilePath: "/old-machine/notes/source.md",
+          content: [{ type: "paragraph", content: "Imported" }],
+        },
+      ],
+      history: {
+        "source-page": {
+          index: {
+            pageId: "source-page",
+            versions: [
+              {
+                versionId: "v1",
+                createdAt: 1,
+                trigger: "manual",
+                isMilestone: false,
+                charCount: 8,
+                charDelta: 8,
+                size: 64,
+              },
+            ],
+            lastVersionCharCount: 8,
+          },
+          versions: [
+            {
+              versionId: "v1",
+              pageId: "source-page",
+              workspaceId: notebookId,
+              createdAt: 1,
+              trigger: "manual",
+              isMilestone: false,
+              charCount: 8,
+              charDelta: 8,
+              size: 64,
+              content: [{ type: "paragraph", content: "Imported" }],
+            },
+          ],
+        },
+      },
+    }),
+  );
+
+  const importedPages: Array<Partial<Page>> = [];
+  await importNotebooksFromZip(
+    (await zip.generateAsync({ type: "arraybuffer" })) as unknown as Blob,
+    (_name, _icon, id) => id ?? notebookId,
+    async (data, _workspaceId, _parentId, id) => {
+      importedPages.push(data);
+      return `created-${id}`;
+    },
+  );
+
+  expect(importedPages[0].localFilePath).toBeUndefined();
+  expect(docs.has("gn:hist-idx:source-page")).toBe(false);
+  expect(docs.get("gn:hist-idx:created-source-page")?.data).toMatchObject({
+    pageId: "created-source-page",
+  });
+  expect(docs.get("gn:hist:created-source-page:v1")?.data).toMatchObject({
+    pageId: "created-source-page",
+  });
+});
+
 test("generateExportZip bundles audio and video attachment refs", async () => {
   installAttachmentRuntime();
 
@@ -409,4 +586,44 @@ test("generateExportZip keeps same relative image names separate across local fo
     "C:/notes/a/assets/shared.png",
     "C:/notes/b/assets/shared.png",
   ]);
+});
+
+test("inspectNotebookImportZip accepts a valid metadata backup without mutating stores", async () => {
+  const zip = new JSZip();
+  zip.file(
+    "backup-metadata.json",
+    JSON.stringify({
+      version: 1,
+      notebooks: [{ id: "nb-1", name: "Note" }],
+      pages: [{ id: "page-1", workspaceId: "nb-1", content: [] }],
+      history: {},
+    }),
+  );
+
+  const result = await inspectNotebookImportZip(
+    await zip.generateAsync({ type: "blob" }),
+  );
+
+  expect(result).toEqual({
+    source: "metadata",
+    notebookCount: 1,
+    pageCount: 1,
+  });
+});
+
+test("inspectNotebookImportZip rejects damaged metadata before destructive restore", async () => {
+  const zip = new JSZip();
+  zip.file("backup-metadata.json", "{not-json");
+
+  await expect(
+    inspectNotebookImportZip(await zip.generateAsync({ type: "blob" })),
+  ).rejects.toThrow("备份元数据已损坏");
+});
+
+test("inspectNotebookImportZip rejects an empty zip before destructive restore", async () => {
+  const zip = new JSZip();
+
+  await expect(
+    inspectNotebookImportZip(await zip.generateAsync({ type: "blob" })),
+  ).rejects.toThrow("没有可恢复的鹅的笔记数据");
 });

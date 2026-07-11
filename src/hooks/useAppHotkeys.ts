@@ -6,7 +6,7 @@ import { useNotebooks } from "@/stores/useNotebooks";
 import { useTabs } from "@/stores/useTabs";
 import { useSidebarView } from "@/stores/useSidebarView";
 import { closeAllOverlays } from "@/lib/closeAllOverlays";
-import { matchShortcut } from "@/lib/shortcut-match";
+import { matchShortcut, shortcutHasModifier } from "@/lib/shortcut-match";
 
 type HotkeyEntry = {
   id: string;
@@ -69,13 +69,26 @@ export function useAppHotkeys() {
       event.code === "Minus" ||
       event.code === "NumpadSubtract";
     const isZoomResetKey = (event: KeyboardEvent) =>
-      event.key === "0" ||
-      event.code === "Digit0" ||
-      event.code === "Numpad0";
+      event.key === "0" || event.code === "Digit0" || event.code === "Numpad0";
 
     // ----- shared modifier gate for meta/ctrl-based shortcuts -----
     const hasPrimaryModifier = (event: KeyboardEvent) =>
       (event.metaKey || event.ctrlKey) && !event.altKey && !event.repeat;
+
+    const matchesConfiguredShortcut = (event: KeyboardEvent, shortcut: string) =>
+      matchShortcut(
+        event.key === " "
+          ? ({
+              key: "Space",
+              code: event.code,
+              ctrlKey: event.ctrlKey,
+              metaKey: event.metaKey,
+              altKey: event.altKey,
+              shiftKey: event.shiftKey,
+            } as KeyboardEvent)
+          : event,
+        shortcut,
+      );
 
     const entries: HotkeyEntry[] = [
       // F3 → editor find navigation
@@ -98,7 +111,7 @@ export function useAppHotkeys() {
         match: (event) => {
           const s = appShortcutsRef.current.openSettings;
           if (!s) return false;
-          if (s === 'Mod+,') {
+          if (s === "Mod+,") {
             return (
               hasPrimaryModifier(event) &&
               (event.key === "," ||
@@ -107,7 +120,7 @@ export function useAppHotkeys() {
               !event.shiftKey
             );
           }
-          return matchShortcut(event, s);
+          return matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();
@@ -120,7 +133,7 @@ export function useAppHotkeys() {
         id: "open-search",
         match: (event) => {
           const s = appShortcutsRef.current.openSearch;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => !isEditableInput() && !isRichTextEditing(),
         handler: (event) => {
@@ -135,7 +148,7 @@ export function useAppHotkeys() {
         id: "toggle-ai-panel",
         match: (event) => {
           const s = appShortcutsRef.current.toggleAIPanel;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();
@@ -147,7 +160,7 @@ export function useAppHotkeys() {
         id: "toggle-sidebar",
         match: (event) => {
           const s = appShortcutsRef.current.toggleSidebar;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();
@@ -160,7 +173,7 @@ export function useAppHotkeys() {
         id: "editor-find-open",
         match: (event) => {
           const s = appShortcutsRef.current.editorFindOpen;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();
@@ -218,7 +231,7 @@ export function useAppHotkeys() {
         id: "save",
         match: (event) => {
           const s = appShortcutsRef.current.saveNote;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => !isEditableInput(),
         handler: (event) => {
@@ -239,18 +252,31 @@ export function useAppHotkeys() {
         id: "new-note",
         match: (event) => {
           const s = appShortcutsRef.current.newNote;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => !isEditableInput(),
         handler: (event) => {
           event.preventDefault();
-          const { createPage } = usePages.getState();
-          const { activeNotebookId } = useNotebooks.getState();
-          if (activeNotebookId) {
-            const newPageId = createPage(undefined, activeNotebookId);
+          void (async () => {
+            const pagesStore = usePages.getState();
+            const notebooksStore = useNotebooks.getState();
+            const { activeNotebookId, notebooks } = notebooksStore;
+            if (!activeNotebookId) return;
+
+            const notebook = notebooks[activeNotebookId];
+            const newPageId =
+              notebook?.source === "local-folder"
+                ? await pagesStore.createLocalPage(undefined, activeNotebookId)
+                : pagesStore.createPage(undefined, activeNotebookId);
+            if (!newPageId) return;
             useTabs.getState().openTab(newPageId);
-            toast("已创建新笔记", { duration: 1500 });
-          }
+            toast(
+              notebook?.source === "local-folder"
+                ? "已创建新文件"
+                : "已创建新笔记",
+              { duration: 1500 },
+            );
+          })();
         },
       },
       // toggle theme (Mod+Shift+L)
@@ -258,7 +284,7 @@ export function useAppHotkeys() {
         id: "toggle-theme",
         match: (event) => {
           const s = appShortcutsRef.current.toggleTheme;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();
@@ -270,7 +296,7 @@ export function useAppHotkeys() {
         id: "nav-back",
         match: (event) => {
           const s = appShortcutsRef.current.navBack;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => {
           const hasOpenModal = () =>
@@ -288,7 +314,7 @@ export function useAppHotkeys() {
         id: "nav-forward",
         match: (event) => {
           const s = appShortcutsRef.current.navForward;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => {
           const hasOpenModal = () =>
@@ -307,7 +333,7 @@ export function useAppHotkeys() {
         id: "new-tab",
         match: (event) => {
           const s = appShortcutsRef.current.newTab;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         when: () => {
           const hasOpenModal = () =>
@@ -327,36 +353,52 @@ export function useAppHotkeys() {
         id: "unified-close",
         match: (event) =>
           !event.defaultPrevented &&
-          matchShortcut(event, closeTabShortcutRef.current),
+          matchesConfiguredShortcut(event, closeTabShortcutRef.current),
         when: (event) => {
           const target = event.target as HTMLElement | null;
           // Never intercept when inside the shortcut recorder input itself
-          if (target?.closest?.('[data-shortcut-recorder]')) return false;
+          if (target?.closest?.("[data-shortcut-recorder]")) return false;
           // Check if any closeable layer exists — if so, fire even from an input
-          const hasToast = !!document.querySelector('[data-sonner-toast]:not([data-removed="true"])');
-          const hasDialog = !!document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]');
+          const hasToast = !!document.querySelector(
+            '[data-sonner-toast]:not([data-removed="true"])',
+          );
+          const hasDialog = !!document.querySelector(
+            '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+          );
           if (hasToast || hasDialog) return true;
-          // Otherwise use original input guard
-          const isInInput =
+          // Modified close shortcuts should work from the editor too; bare keys
+          // stay blocked so normal typing cannot close a tab by accident.
+          const isInEditableTarget =
             !!target &&
             (target.tagName === "INPUT" ||
+              target.tagName === "SELECT" ||
               target.tagName === "TEXTAREA" ||
-              target.isContentEditable);
-          return !isInInput;
+              target.isContentEditable ||
+              !!target.closest?.(".bn-editor"));
+          return !isInEditableTarget || shortcutHasModifier(closeTabShortcutRef.current);
         },
         handler: (event) => {
           event.preventDefault();
           // a. dismiss toasts first
-          const toastEl = document.querySelector('[data-sonner-toast]:not([data-removed="true"])');
+          const toastEl = document.querySelector(
+            '[data-sonner-toast]:not([data-removed="true"])',
+          );
           if (toastEl) {
             toast.dismiss();
             return;
           }
           // b. close topmost dialog via Escape
-          const dialogEl = document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]');
+          const dialogEl = document.querySelector(
+            '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+          );
           if (dialogEl) {
             document.dispatchEvent(
-              new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }),
+              new KeyboardEvent("keydown", {
+                key: "Escape",
+                code: "Escape",
+                bubbles: true,
+                cancelable: true,
+              }),
             );
             return;
           }
@@ -423,7 +465,7 @@ export function useAppHotkeys() {
         match: (event) => {
           if (event.defaultPrevented) return false;
           const s = appShortcutsRef.current.reopenTab;
-          return !!s && matchShortcut(event, s);
+          return !!s && matchesConfiguredShortcut(event, s);
         },
         handler: (event) => {
           event.preventDefault();

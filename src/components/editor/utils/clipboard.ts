@@ -14,6 +14,54 @@ export function looksLikeMarkdownFragment(text: string): boolean {
   );
 }
 
+const MERMAID_START_PATTERNS = [
+  /^(?:graph|flowchart)\s+(?:TB|TD|BT|RL|LR)\b/i,
+  /^sequenceDiagram\b/i,
+  /^classDiagram(?:-v2)?\b/i,
+  /^stateDiagram(?:-v2)?\b/i,
+  /^erDiagram\b/i,
+  /^journey\b/i,
+  /^gantt\b/i,
+  /^pie(?:\s+title\b|\b)/i,
+  /^gitGraph\b/i,
+  /^mindmap\b/i,
+  /^timeline\b/i,
+  /^quadrantChart\b/i,
+  /^requirementDiagram\b/i,
+  /^C4(?:Context|Container|Component|Dynamic|Deployment)\b/,
+  /^sankey-beta\b/i,
+  /^xychart-beta\b/i,
+  /^block-beta\b/i,
+  /^packet-beta\b/i,
+  /^architecture-beta\b/i,
+];
+
+export function looksLikeMermaidDiagram(text: string): boolean {
+  const normalized = normalizeClipboardLineEndings(text).trim();
+  if (!normalized || normalized.includes("```")) return false;
+
+  const lines = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const firstContentLine = lines.find(
+    (line) => !line.startsWith("%%") && !/^---$/.test(line),
+  );
+  if (!firstContentLine) return false;
+  if (!MERMAID_START_PATTERNS.some((pattern) => pattern.test(firstContentLine))) {
+    return false;
+  }
+
+  // 避免用户只粘了一个 Mermaid 声明词时误转。真实图表通常还有一行内容，
+  // 或同一行已经包含标题/数据/关系语法。
+  return (
+    lines.length > 1 ||
+    /(-->|---|==>|-.->|:\s|title\s+|accTitle\s*:|accDescr\s*:)/i.test(
+      firstContentLine,
+    )
+  );
+}
+
 export function stripMarkdownHardBreaks(text: string): string {
   return normalizeClipboardLineEndings(text)
     .replace(/\\\n/g, "\n")

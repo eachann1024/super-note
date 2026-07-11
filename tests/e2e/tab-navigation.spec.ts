@@ -15,10 +15,12 @@ async function seedTwoPages(page: import("playwright/test").Page) {
         resetTabs: () => void;
         createPage: (parentId?: string, workspaceId?: string) => string;
         getNotebooksState: () => { activeNotebookId: string | null };
+        setCloseTabShortcut: (shortcut: string) => void;
       };
     }).__GOOSE_TEST__;
     if (!bridge) throw new Error("Test bridge unavailable");
     bridge.resetTabs();
+    bridge.setCloseTabShortcut("Alt+W");
   });
 
   return page.evaluate(() => {
@@ -213,5 +215,134 @@ test.describe("VSCode-style tab navigation", () => {
     );
     await expect(previewTab).toBeVisible();
     await expect(previewTab.locator("span.truncate")).toHaveClass(/italic/);
+  });
+
+  test("notebook switch activates and scopes the tab bar to the selected notebook", async ({
+    page,
+  }) => {
+    const ids = await page.evaluate(async () => {
+      const bridge = (window as Window & {
+        __GOOSE_TEST__?: {
+          resetTabs: () => void;
+          createNotebook: (name?: string, icon?: string) => string;
+          createPage: (parentId?: string, workspaceId?: string) => string;
+          openPermanentTab: (pageId: string) => void;
+          activateNotebook: (notebookId: string) => Promise<string | null>;
+          getNotebooksState: () => { activeNotebookId: string | null };
+        };
+      }).__GOOSE_TEST__;
+      if (!bridge) throw new Error("Test bridge unavailable");
+
+      bridge.resetTabs();
+      const noteNotebookId =
+        bridge.getNotebooksState().activeNotebookId ?? "default-notebook";
+      const notePage = bridge.createPage(undefined, noteNotebookId);
+      const devNotebookId = bridge.createNotebook("Dev");
+      const devPage = bridge.createPage(undefined, devNotebookId);
+
+      bridge.openPermanentTab(notePage);
+      bridge.openPermanentTab(devPage);
+
+      await bridge.activateNotebook(noteNotebookId);
+      return { noteNotebookId, notePage, devNotebookId, devPage };
+    });
+
+    const afterNoteSwitch = await page.evaluate(() => {
+      const bridge = (window as Window & {
+        __GOOSE_TEST__?: {
+          getTabsState: () => {
+            openTabs: Array<{ id: string; pageId: string }>;
+            activeTabId: string | null;
+          };
+          getPagesState: () => { activePageId: string | null };
+          getNotebooksState: () => { activeNotebookId: string | null };
+        };
+      }).__GOOSE_TEST__;
+      if (!bridge) throw new Error("Test bridge unavailable");
+      const tabs = bridge.getTabsState();
+      const activeTab = tabs.openTabs.find(
+        (tab) => tab.id === tabs.activeTabId,
+      );
+      return {
+        activeNotebookId: bridge.getNotebooksState().activeNotebookId,
+        activePageId: bridge.getPagesState().activePageId,
+        activeTabPageId: activeTab?.pageId ?? null,
+      };
+    });
+
+    expect(afterNoteSwitch.activeNotebookId).toBe(ids.noteNotebookId);
+    expect(afterNoteSwitch.activePageId).toBe(ids.notePage);
+    expect(afterNoteSwitch.activeTabPageId).toBe(ids.notePage);
+
+    await page.evaluate(async (devNotebookId) => {
+      const bridge = (window as Window & {
+        __GOOSE_TEST__?: {
+          activateNotebook: (notebookId: string) => Promise<string | null>;
+        };
+      }).__GOOSE_TEST__;
+      if (!bridge) throw new Error("Test bridge unavailable");
+      await bridge.activateNotebook(devNotebookId);
+    }, ids.devNotebookId);
+
+    const devTab = page.locator(`[data-tab-page-id="${ids.devPage}"]`);
+    await expect(devTab).toBeVisible();
+    await expect(devTab).toHaveAttribute("data-tab-active", "true");
+    await expect(page.locator(`[data-tab-page-id="${ids.notePage}"]`)).toHaveCount(0);
+  });
+
+  test("configured close-tab shortcut works while editor content is focused", async ({
+    page,
+  }) => {
+    const { a, b } = await seedTwoPages(page);
+
+    await page.evaluate(
+      ({ pageA, pageB }) => {
+        const bridge = (window as Window & {
+          __GOOSE_TEST__?: {
+            openPermanentTab: (pageId: string) => void;
+            setCloseTabShortcut: (shortcut: string) => void;
+          };
+        }).__GOOSE_TEST__;
+        if (!bridge) throw new Error("Test bridge unavailable");
+        bridge.setCloseTabShortcut("Ctrl+W");
+        bridge.openPermanentTab(pageA);
+        bridge.openPermanentTab(pageB);
+      },
+      { pageA: a, pageB: b },
+    );
+
+    await page.evaluate(() => {
+      const editorTarget = document.createElement("div");
+      editorTarget.className = "bn-editor";
+      editorTarget.contentEditable = "true";
+      editorTarget.tabIndex = 0;
+      document.body.appendChild(editorTarget);
+      editorTarget.focus();
+      editorTarget.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "w",
+          code: "KeyW",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    const state = await page.evaluate(() => {
+      const bridge = (window as Window & {
+        __GOOSE_TEST__?: {
+          getTabsState: () => {
+            openTabs: Array<{ pageId: string }>;
+            activeTabId: string | null;
+          };
+        };
+      }).__GOOSE_TEST__;
+      if (!bridge) throw new Error("Test bridge unavailable");
+      return bridge.getTabsState();
+    });
+
+    expect(state.openTabs).toHaveLength(1);
+    expect(state.openTabs[0].pageId).toBe(a);
   });
 });

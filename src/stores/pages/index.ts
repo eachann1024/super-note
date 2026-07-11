@@ -25,6 +25,7 @@ import {
   createPageRecordAction,
   createLocalPageAction,
   createLocalPageRecordAction,
+  createLocalFolderRecordAction,
   duplicatePageAction,
 } from "./actions/pageCreate";
 import {
@@ -93,6 +94,9 @@ export const usePages = create<PagesState>()((set, get) => ({
 
   createLocalPageRecord: (options) =>
     createLocalPageRecordAction(set, get, options),
+
+  createLocalFolderRecord: (options) =>
+    createLocalFolderRecordAction(set, get, options),
 
   updatePage: (id, updates, options) => {
     const page = get().pages[id];

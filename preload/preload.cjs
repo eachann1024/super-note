@@ -4,6 +4,7 @@ const os = require("os");
 const path = require("path");
 const http = require("http");
 const https = require("https");
+const { spawn, spawnSync } = require("child_process");
 const { URL: NodeURL } = require("url");
 const {
   buildLocalPageId,
@@ -52,44 +53,77 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     );
   };
 
-  const readStoredString = (storageKey) => {
-    let fallbackValue = null;
+  const getStorageDocId = (storageKey) => `${STORAGE_FALLBACK_DOC_PREFIX}${storageKey}`;
+
+  const readStoredDocString = (storageKey) => {
     try {
       if (utools?.db?.get) {
-        const fallbackDoc = utools.db.get(`${STORAGE_FALLBACK_DOC_PREFIX}${storageKey}`);
-        if (typeof fallbackDoc?.data === "string") {
-          fallbackValue = fallbackDoc.data;
-        } else if (typeof fallbackDoc?.data?.value === "string") {
-          fallbackValue = fallbackDoc.data.value;
+        const doc = utools.db.get(getStorageDocId(storageKey));
+        if (typeof doc?.data === "string") {
+          return doc.data;
+        }
+        if (typeof doc?.data?.value === "string") {
+          return doc.data.value;
         }
       }
     } catch (error) {
-      console.error("[goose-note] read fallback storage failed:", error);
+      console.error("[goose-note] read storage doc failed:", error);
     }
+    return null;
+  };
 
-    if (fallbackValue !== null) {
-      return fallbackValue;
+  const writeStoredDocString = (storageKey, value) => {
+    try {
+      if (utools?.db?.put && utools?.db?.get) {
+        const docId = getStorageDocId(storageKey);
+        const current = utools.db.get(docId);
+        let result = utools.db.put({
+          _id: docId,
+          _rev: current?._rev,
+          data: {
+            value,
+            updatedAt: Date.now(),
+          },
+        });
+        if (result?.ok !== false) return true;
+
+        const latest = utools.db.get(docId);
+        result = utools.db.put({
+          _id: docId,
+          _rev: latest?._rev,
+          data: {
+            value,
+            updatedAt: Date.now(),
+          },
+        });
+        if (result?.ok !== false) return true;
+      }
+    } catch (error) {
+      console.error("[goose-note] write storage doc failed:", error);
     }
+    return false;
+  };
+
+  const removeDbStorageString = (storageKey) => {
+    try {
+      if (typeof utools?.dbStorage?.removeItem === "function") {
+        utools.dbStorage.removeItem(storageKey);
+      }
+    } catch (error) {
+      console.error("[goose-note] remove dbStorage failed:", error);
+    }
+  };
+
+  const readStoredString = (storageKey) => {
+    const storedValue = readStoredDocString(storageKey);
+    if (storedValue !== null) return storedValue;
 
     try {
       if (typeof utools?.dbStorage?.getItem === "function") {
         const value = utools.dbStorage.getItem(storageKey);
         if (typeof value === "string") {
-          try {
-            if (utools?.db?.put && utools?.db?.get) {
-              const docId = `${STORAGE_FALLBACK_DOC_PREFIX}${storageKey}`;
-              const current = utools.db.get(docId);
-              utools.db.put({
-                _id: docId,
-                _rev: current?._rev,
-                data: {
-                  value,
-                  updatedAt: Date.now(),
-                },
-              });
-            }
-          } catch (migrateErr) {
-            console.error("[goose-note] migrate dbStorage to db failed:", migrateErr);
+          if (writeStoredDocString(storageKey, value)) {
+            removeDbStorageString(storageKey);
           }
           return value;
         }
@@ -102,29 +136,8 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
   };
 
   const writeStoredString = (storageKey, value) => {
-    try {
-      if (utools?.db?.put && utools?.db?.get) {
-        const docId = `${STORAGE_FALLBACK_DOC_PREFIX}${storageKey}`;
-        const current = utools.db.get(docId);
-        utools.db.put({
-          _id: docId,
-          _rev: current?._rev,
-          data: {
-            value,
-            updatedAt: Date.now(),
-          },
-        });
-      }
-    } catch (error) {
-      console.error("[goose-note] write fallback storage failed:", error);
-    }
-
-    try {
-      if (typeof utools?.dbStorage?.setItem === "function") {
-        utools.dbStorage.setItem(storageKey, value);
-      }
-    } catch (error) {
-      console.error("[goose-note] write dbStorage failed:", error);
+    if (writeStoredDocString(storageKey, value)) {
+      removeDbStorageString(storageKey);
     }
   };
 
@@ -304,6 +317,204 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     }
 
     return false;
+  };
+
+  const quoteShellArg = (value) => `'${String(value).replace(/'/g, "'\\''")}'`;
+
+  const getCandidateNames = (candidate) => {
+    const names = [candidate?.appName, ...(candidate?.aliases || [])]
+      .filter((item) => typeof item === "string" && item.trim().length > 0)
+      .map((item) => item.trim().replace(/\.app$/i, ""));
+    return Array.from(new Set(names));
+  };
+
+  const macApplicationRoots = () => [
+    "/Applications",
+    "/System/Applications",
+    "/System/Applications/Utilities",
+    "/System/Library/CoreServices",
+    path.join(os.homedir(), "Applications"),
+  ];
+
+  const resolveMacAppName = (candidate) => {
+    for (const name of getCandidateNames(candidate)) {
+      const bundleName = `${name}.app`;
+      for (const root of macApplicationRoots()) {
+        if (fs.existsSync(path.join(root, bundleName))) {
+          return name;
+        }
+      }
+    }
+    return null;
+  };
+
+  const commandExists = (command) => {
+    if (typeof command !== "string" || !command.trim()) return false;
+    try {
+      const result = spawnSync("/bin/zsh", ["-lc", `command -v ${quoteShellArg(command.trim())}`], {
+        timeout: 1000,
+        stdio: "ignore",
+      });
+      return result.status === 0;
+    } catch {
+      return false;
+    }
+  };
+
+  const resolveOpenAppCandidate = (candidate) => {
+    if (!candidate || typeof candidate !== "object") return null;
+    if (process.platform === "darwin") {
+      const appName = resolveMacAppName(candidate);
+      if (appName) return { ...candidate, appName };
+    }
+
+    const commands = Array.isArray(candidate.commands) ? candidate.commands : [];
+    const command = commands.find(commandExists);
+    if (command) return { ...candidate, appName: command };
+
+    if (process.platform !== "darwin") {
+      const firstName = getCandidateNames(candidate)[0];
+      if (firstName && commandExists(firstName)) return { ...candidate, appName: firstName };
+    }
+
+    return null;
+  };
+
+  const listAvailableOpenApps = async (candidates) => {
+    if (!Array.isArray(candidates)) return [];
+    return candidates
+      .map(resolveOpenAppCandidate)
+      .filter(Boolean);
+  };
+
+  const finishChildLaunch = (child, resolve, fallback) => {
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    const timeout = setTimeout(() => done(true), 3000);
+    child.on("error", () => {
+      clearTimeout(timeout);
+      if (fallback) {
+        void fallback().then(done);
+        return;
+      }
+      done(false);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (code === 0) {
+        done(true);
+        return;
+      }
+      if (fallback) {
+        void fallback().then(done);
+        return;
+      }
+      done(false);
+    });
+    child.on("spawn", () => {
+      if (process.platform !== "darwin") {
+        clearTimeout(timeout);
+        done(true);
+      }
+    });
+    child.unref();
+  };
+
+  const runDetachedCommand = (commandLine, args = []) => {
+    return new Promise((resolve) => {
+      try {
+        const child = spawn(commandLine, args, {
+          detached: true,
+          stdio: "ignore",
+          shell: true,
+        });
+        finishChildLaunch(child, resolve);
+      } catch (err) {
+        console.error("[gooseFs] runDetachedCommand failed:", err);
+        resolve(false);
+      }
+    });
+  };
+
+  const openWithApp = (targetPath, appCommand) => {
+    return new Promise((resolve) => {
+      const command = typeof appCommand === "string" ? appCommand.trim() : "";
+      if (!command) {
+        resolve(false);
+        return;
+      }
+
+      try {
+        if (process.platform === "darwin") {
+          const child = spawn("open", ["-a", command, targetPath], {
+            detached: true,
+            stdio: "ignore",
+          });
+          finishChildLaunch(child, resolve, () => runDetachedCommand(command, [targetPath]));
+          return;
+        }
+
+        void runDetachedCommand(command, [targetPath]).then(resolve);
+      } catch (err) {
+        console.error("[gooseFs] openWithApp failed:", err);
+        resolve(false);
+      }
+    });
+  };
+
+  const resolveDirectoryTarget = (targetPath) => {
+    try {
+      const stat = fs.statSync(targetPath);
+      if (stat.isDirectory()) return targetPath;
+      return path.dirname(targetPath);
+    } catch {
+      return targetPath;
+    }
+  };
+
+  const openTerminalAtPath = (targetPath, terminalCommand) => {
+    return new Promise((resolve) => {
+      const dirPath = resolveDirectoryTarget(targetPath);
+      const command = typeof terminalCommand === "string" ? terminalCommand.trim() : "";
+
+      try {
+        if (process.platform === "darwin") {
+          const appName = command || "Terminal";
+          const child = spawn("open", ["-a", appName, dirPath], {
+            detached: true,
+            stdio: "ignore",
+          });
+          finishChildLaunch(
+            child,
+            resolve,
+            command ? () => runDetachedCommand(command, [dirPath]) : undefined,
+          );
+          return;
+        }
+
+        if (process.platform === "win32") {
+          if (command) {
+            void runDetachedCommand(command, [dirPath]).then(resolve);
+            return;
+          }
+          const child = spawn("cmd.exe", ["/c", "start", "", "cmd.exe", "/K", "cd", "/d", dirPath], {
+            detached: true,
+            stdio: "ignore",
+          });
+          finishChildLaunch(child, resolve);
+          return;
+        }
+
+        void runDetachedCommand(command || "x-terminal-emulator", [dirPath]).then(resolve);
+      } catch (err) {
+        console.error("[gooseFs] openTerminalAtPath failed:", err);
+        resolve(false);
+      }
+    });
   };
 
   const getNotebookAvailability = (notebook) => {
@@ -892,6 +1103,8 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     mkdir: (dirPath) => {
       try {
         fs.mkdirSync(dirPath, { recursive: true });
+        recentWrites.set(`${dirPath}${path.sep}`, Date.now());
+        invalidateLocalNotebookCache();
         return true;
       } catch (err) {
         console.error("[gooseFs] mkdir failed:", err);
@@ -976,31 +1189,10 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
     },
 
     revealItemInFolder,
+    listAvailableOpenApps,
 
-    openWithApp: (filePath, editorCommand) => {
-      return new Promise((resolve) => {
-        try {
-          const { spawn } = require("child_process");
-          const isDarwin = process.platform === "darwin";
-          const timeout = setTimeout(() => resolve(true), 3000);
-          if (isDarwin) {
-            const child = spawn("open", ["-a", editorCommand, filePath], { detached: true, stdio: "ignore" });
-            child.on("error", () => { clearTimeout(timeout); resolve(false); });
-            child.on("close", (code) => { clearTimeout(timeout); resolve(code === 0); });
-            child.on("exit", (code) => { clearTimeout(timeout); resolve(code === 0); });
-            child.unref();
-          } else {
-            const child = spawn(editorCommand, [filePath], { detached: true, stdio: "ignore" });
-            child.on("error", () => { clearTimeout(timeout); resolve(false); });
-            child.on("spawn", () => { clearTimeout(timeout); resolve(true); });
-            child.unref();
-          }
-        } catch (err) {
-          console.error("[gooseFs] openWithApp failed:", err);
-          resolve(false);
-        }
-      });
-    },
+    openWithApp,
+    openTerminalAtPath,
   };
 
   registerMcpTools();

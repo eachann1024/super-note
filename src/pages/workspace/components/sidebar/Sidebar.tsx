@@ -19,7 +19,8 @@ import { useHistoryView } from "@/stores/useHistoryView";
 
 const SIDEBAR_SIDE_GAP_LEFT = 0;
 const SIDEBAR_SIDE_GAP_RIGHT = 9;
-const SIDEBAR_CONTENT_WIDTH_OFFSET = SIDEBAR_SIDE_GAP_LEFT + SIDEBAR_SIDE_GAP_RIGHT;
+const SIDEBAR_CONTENT_WIDTH_OFFSET =
+  SIDEBAR_SIDE_GAP_LEFT + SIDEBAR_SIDE_GAP_RIGHT;
 
 type SidebarView = "pages" | "trash" | "outline";
 type SidebarDragGuideMode = "sort" | "nest-ready";
@@ -68,7 +69,12 @@ export function Sidebar({
 
   const [showSettings, setShowSettings] = useState(false);
   const [currentView, setCurrentView] = useState<SidebarView>("pages");
-  const [dragGuide, setDragGuide] = useState<SidebarDragGuideState | null>(null);
+  const [selectedTrashPageId, setSelectedTrashPageId] = useState<string | null>(
+    null,
+  );
+  const [dragGuide, setDragGuide] = useState<SidebarDragGuideState | null>(
+    null,
+  );
 
   // 历史模式：临时整体替换 Sidebar 中段（页面树/大纲），但 Header/Footer 与
   // currentView/scrollAreaRef 等 state 保持，退出后页面树原状回到上次的滚动与选中。
@@ -87,6 +93,7 @@ export function Sidebar({
     renameValue,
     setRenameValue,
     renamePageId,
+    closeRenameDialog,
     confirmRename,
   } = useRenameDialog();
 
@@ -96,6 +103,66 @@ export function Sidebar({
     currentView,
     onOpenSettings: () => setShowSettings(true),
   });
+
+  const exitTrashView = useCallback(() => {
+    setCurrentView((view) => (view === "trash" ? "pages" : view));
+    setSelectedTrashPageId(null);
+  }, []);
+
+  const previousNotebookIdRef = useRef<string | null | undefined>(undefined);
+  const resetSidebarAfterNotebookChange = useCallback(
+    (options: { localFolder: boolean; exitHistory: boolean }) => {
+      setCurrentView("pages");
+      setSelectedTrashPageId(null);
+      setShowSettings(false);
+      closeRenameDialog();
+      if (options.exitHistory) exitHistoryView();
+      if (options.localFolder) void setActivePage(null);
+    },
+    [closeRenameDialog, exitHistoryView, setActivePage],
+  );
+
+  useEffect(() => {
+    const previousNotebookId = previousNotebookIdRef.current;
+    previousNotebookIdRef.current = activeNotebookId;
+    if (previousNotebookId === activeNotebookId) return;
+    if (previousNotebookId === undefined && !isLocalFolder) return;
+
+    resetSidebarAfterNotebookChange({
+      localFolder: isLocalFolder,
+      exitHistory: inHistoryMode,
+    });
+  }, [
+    activeNotebookId,
+    inHistoryMode,
+    isLocalFolder,
+    resetSidebarAfterNotebookChange,
+  ]);
+
+  useEffect(() => {
+    const handleWindowExit = () => {
+      exitTrashView();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        exitTrashView();
+      }
+    };
+
+    window.addEventListener("goose-note:plugin-out", handleWindowExit);
+    window.addEventListener("goose-note:plugin-enter", handleWindowExit);
+    window.addEventListener("pagehide", handleWindowExit);
+    window.addEventListener("beforeunload", handleWindowExit);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("goose-note:plugin-out", handleWindowExit);
+      window.removeEventListener("goose-note:plugin-enter", handleWindowExit);
+      window.removeEventListener("pagehide", handleWindowExit);
+      window.removeEventListener("beforeunload", handleWindowExit);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [exitTrashView]);
 
   useEffect(() => {
     if (!scrollAreaRef.current) return;
@@ -174,7 +241,12 @@ export function Sidebar({
           <HistoryVersionList />
         ) : currentView === "trash" ? (
           <div className="flex-1 overflow-hidden">
-            <TrashList showHeader={false} itemHeight={trashItemHeight} />
+            <TrashList
+              showHeader={false}
+              itemHeight={trashItemHeight}
+              selectedPageId={selectedTrashPageId}
+              onSelectPage={setSelectedTrashPageId}
+            />
           </div>
         ) : (
           <>
@@ -204,7 +276,10 @@ export function Sidebar({
                 />
               </div>
               {currentView === "pages" ? (
-                <div ref={scrollAreaRef} className="pl-0 pr-[9px] flex-1 min-h-0 flex flex-col">
+                <div
+                  ref={scrollAreaRef}
+                  className="pl-0 pr-[9px] flex-1 min-h-0 flex flex-col"
+                >
                   <SidebarMainTree
                     activeNotebookId={activeNotebookId}
                     selectedPageId={selectedPageId}
@@ -232,16 +307,19 @@ export function Sidebar({
       <SidebarFooter
         currentView={currentView}
         isSettingsOpen={showSettings}
+        hideTrash={isLocalFolder}
         onSwitchToTrash={() => {
           // 再点一次回收箱图标即返回页面视图（回收箱视图隐藏了页面/大纲分区头，
           // 没有别的返回入口，靠这个图标做开关，避免卡在回收箱里出不来）。
           if (currentView === "trash") {
             setCurrentView("pages");
+            setSelectedTrashPageId(null);
             return;
           }
           if (inHistoryMode) exitHistoryView();
           setCurrentView("trash");
           setShowSettings(false);
+          setSelectedTrashPageId(null);
           setActivePage(null);
         }}
         onOpenSettings={() => {
@@ -259,7 +337,9 @@ export function Sidebar({
         renameValue={renameValue}
         onRenameValueChange={setRenameValue}
         isLocalFolder={isLocalFolder}
-        onConfirm={() => { void confirmRename(); }}
+        onConfirm={() => {
+          void confirmRename();
+        }}
       />
 
       <SettingsDialog open={showSettings} onOpenChange={setShowSettings} />

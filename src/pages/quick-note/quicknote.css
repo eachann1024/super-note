@@ -16,6 +16,15 @@ body,
 .quicknote-root {
   width: 100vw;
   overflow: hidden;
+  box-shadow:
+    inset 0 0 0 1px rgba(15, 23, 42, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.dark .quicknote-root {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* 顶部标题栏：浮层化——默认隐藏，鼠标进入窗口才淡入（不占布局高度，
@@ -61,6 +70,12 @@ body,
   padding-inline: 4px;
   padding-top: 32px;
   padding-bottom: 16px;
+}
+
+.quicknote-editor-scale {
+  --quicknote-editor-zoom: 1;
+  transform: scale(var(--quicknote-editor-zoom));
+  transform-origin: top left;
 }
 /* 首块去掉 BlockNote 给 heading 的 18px 内置上间距：该间距是用来跟「上文」拉开
    距离的，但首块前面没有内容，叠加 surface padding 后顶部会显出一大段死空白。
@@ -115,7 +130,29 @@ body,
 /* 速记斜杠菜单：更紧凑行高；列表底部留白，避免滚到底最后一项贴边被裁切感 */
 .quicknote-root [data-goose-slash-lite="true"] [data-notion-slash-surface="true"] {
   overflow: hidden;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
+  /* uTools 旧内核会把大圆角外投影绘成直角灰块；小窗只留很轻的边界感。 */
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.quicknote-root [data-goose-slash-lite="true"] [data-goose-slash-item] {
+  background: transparent !important;
+  border-left: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.quicknote-root [data-goose-slash-lite="true"] [data-goose-slash-item]:active,
+.quicknote-root [data-goose-slash-lite="true"] [data-goose-slash-item]:focus,
+.quicknote-root [data-goose-slash-lite="true"] [data-goose-slash-item]:focus-visible,
+.quicknote-root [data-goose-slash-lite="true"] [data-goose-slash-selected="true"] {
+  background: transparent !important;
+  border-left: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.quicknote-root [data-goose-slash-lite="true"] [data-goose-slash-selected="true"] {
+  background: transparent !important;
 }
 
 .quicknote-root [data-goose-slash-lite="true"] [data-notion-slash-scroll] {

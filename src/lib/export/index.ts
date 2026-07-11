@@ -27,10 +27,11 @@ export {
 export {
   exportNotebooks,
   generateExportZip,
+  inspectNotebookImportZip,
   importNotebooksFromZip,
   type ExportOptions,
 } from "./zipBundle";
-export { saveBlobAndReveal } from "./fileSave";
+export { saveBlobAndReveal, saveBlobWithPrompt } from "./fileSave";
 export { exportToPDF } from "@/lib/pdfExport";
 
 function cloneExportBlocks(content: BlockNoteContent): BlockNoteContent {

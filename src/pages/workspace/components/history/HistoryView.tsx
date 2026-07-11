@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import * as LucideIcons from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useHistoryView } from "@/stores/useHistoryView";
 import { usePages } from "@/stores/usePages";
-import { useNotebooks } from "@/stores/useNotebooks";
-import { useSettings } from "@/stores/useSettings";
 import { resolveHistoryBackend } from "@/lib/history/backend";
 import {
   markMilestone,
@@ -15,7 +15,14 @@ import {
 } from "@/lib/history/snapshot";
 import { materializeVersion } from "@/lib/history/restore";
 import type { HistoryIndex, HistoryIndexEntry } from "@/lib/history/types";
-import type { BlockNoteContent } from "@/components/editor/utils/blocknote-content";
+import {
+  createEditorSafeContent,
+  extractBlockNoteTitle,
+  normalizePageContent,
+  type BlockNoteContent,
+} from "@/components/editor/utils/blocknote-content";
+import { editorSchema } from "@/components/editor/core/EditorComposer";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { HistoryReadOnlyEditor } from "./HistoryReadOnlyEditor";
 
 const TRIGGER_LABEL: Record<HistoryIndexEntry["trigger"], string> = {
@@ -23,6 +30,24 @@ const TRIGGER_LABEL: Record<HistoryIndexEntry["trigger"], string> = {
   manual: "手动",
   "pre-op": "操作前",
 };
+
+type SelectedHistoryStatus = "idle" | "loading" | "ready" | "missing" | "error";
+
+function triggerLabel(trigger: HistoryIndexEntry["trigger"]): string {
+  return TRIGGER_LABEL[trigger] ?? "自动";
+}
+
+function createSafeHistoryContent(content: unknown): BlockNoteContent | null {
+  try {
+    return createEditorSafeContent(
+      normalizePageContent(content as any),
+      editorSchema,
+    );
+  } catch (error) {
+    console.error("[history] normalize history content failed", error);
+    return null;
+  }
+}
 
 function formatGroupLabel(ts: number, now: number): string {
   const d1 = new Date(ts);
@@ -65,6 +90,8 @@ function useHistoryViewLogic() {
 
   const [index, setIndex] = useState<HistoryIndex | null>(null);
   const [selectedContent, setSelectedContent] = useState<BlockNoteContent | null>(null);
+  const [selectedStatus, setSelectedStatus] =
+    useState<SelectedHistoryStatus>("idle");
 
   // 加载版本索引
   useEffect(() => {
@@ -86,13 +113,32 @@ function useHistoryViewLogic() {
   useEffect(() => {
     if (!pageId || !selectedVersionId) {
       setSelectedContent(null);
+      setSelectedStatus("idle");
       return;
     }
     let cancelled = false;
+    setSelectedContent(null);
+    setSelectedStatus("loading");
     materializeVersion(pageId, selectedVersionId).then((result) => {
-      if (!cancelled) setSelectedContent(result?.content ?? null);
+      if (cancelled) return;
+      if (!result || result.content == null) {
+        setSelectedContent(null);
+        setSelectedStatus("missing");
+        return;
+      }
+      const safeContent = createSafeHistoryContent(result.content);
+      if (!safeContent) {
+        setSelectedContent(null);
+        setSelectedStatus("error");
+        return;
+      }
+      setSelectedContent(safeContent);
+      setSelectedStatus("ready");
     }).catch(() => {
-      if (!cancelled) setSelectedContent(null);
+      if (!cancelled) {
+        setSelectedContent(null);
+        setSelectedStatus("error");
+      }
     });
     return () => { cancelled = true; };
   }, [pageId, selectedVersionId]);
@@ -167,11 +213,16 @@ function useHistoryViewLogic() {
     }).catch((err) => console.error("[history] pre-op snapshot failed:", err));
 
     materializeVersion(pageId, selectedVersionId).then((result) => {
-      if (!result) {
+      if (!result || result.content == null) {
         toast.error("无法读取该版本");
         return;
       }
-      const updates: Parameters<typeof updatePage>[1] = { content: result.content };
+      const safeContent = createSafeHistoryContent(result.content);
+      if (!safeContent) {
+        toast.error("该历史版本格式异常，无法还原");
+        return;
+      }
+      const updates: Parameters<typeof updatePage>[1] = { content: safeContent };
       if (result.localFrontmatter !== undefined) {
         updates.localFrontmatter = result.localFrontmatter;
       }
@@ -206,6 +257,7 @@ function useHistoryViewLogic() {
     selectedVersionId,
     selectedEntry,
     selectedContent,
+    selectedStatus,
     exit,
     select,
     handleRestore,
@@ -307,7 +359,7 @@ export function HistoryVersionList() {
                         </div>
                         <div className="flex items-center justify-between mt-0.5">
                           <span className="text-[10px] text-muted-foreground/50">
-                            {TRIGGER_LABEL[v.trigger]} · {v.charCount} 字
+                            {triggerLabel(v.trigger)} · {v.charCount} 字
                           </span>
                           <span
                             role="button"
@@ -348,8 +400,14 @@ export function HistoryVersionList() {
  * 高度 h-11 与 PageHeader 节奏对齐。
  */
 export function HistoryToolbar() {
-  const { pageTitle, selectedEntry, selectedVersionId, exit, handleRestore } =
-    useHistoryViewLogic();
+  const {
+    pageTitle,
+    selectedEntry,
+    selectedVersionId,
+    selectedStatus,
+    exit,
+    handleRestore,
+  } = useHistoryViewLogic();
 
   return (
     <header className="h-11 px-3 flex items-center gap-3 border-b border-border/50 shrink-0 bg-[hsl(var(--goose-shell-bg))]">
@@ -376,7 +434,7 @@ export function HistoryToolbar() {
               {new Date(selectedEntry.createdAt).toLocaleString("zh-CN")}
             </span>
             <span className="px-1.5 py-0.5 rounded-[10px] bg-[hsl(var(--goose-selected-bg))] text-foreground/60">
-              {TRIGGER_LABEL[selectedEntry.trigger]}
+              {triggerLabel(selectedEntry.trigger)}
             </span>
             {selectedEntry.charDelta !== 0 && (
               <span
@@ -392,16 +450,52 @@ export function HistoryToolbar() {
             )}
           </div>
         )}
-        <Button
-          size="sm"
-          className="h-7 px-3 text-xs"
-          disabled={!selectedVersionId}
-          onClick={handleRestore}
-        >
+          <Button
+            size="sm"
+            className="h-7 px-3 text-xs"
+            disabled={!selectedVersionId || selectedStatus !== "ready"}
+            onClick={handleRestore}
+          >
           还原此版本
         </Button>
       </div>
     </header>
+  );
+}
+
+function HistoryReaderState({
+  icon: Icon,
+  title,
+  description,
+  spinning = false,
+  action,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description?: string;
+  spinning?: boolean;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="h-full min-h-[280px] flex items-center justify-center px-6 text-center">
+      <div className="flex max-w-sm flex-col items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[var(--goose-interactive-hover)] text-muted-foreground">
+          <Icon
+            className={cn("h-5 w-5", spinning && "animate-spin")}
+            strokeWidth={1.75}
+          />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">{title}</p>
+          {description && (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {description}
+            </p>
+          )}
+        </div>
+        {action}
+      </div>
+    </div>
   );
 }
 
@@ -410,20 +504,91 @@ export function HistoryToolbar() {
  * 复用与主 Editor 完全一致的滚动容器和 max-w-4xl 包裹。
  */
 export function HistoryReader() {
-  const { selectedContent, selectedVersionId, isEmpty } = useHistoryViewLogic();
+  const {
+    selectedContent,
+    selectedVersionId,
+    selectedStatus,
+    isEmpty,
+  } = useHistoryViewLogic();
+
+  if (selectedStatus === "loading") {
+    return (
+      <HistoryReaderState
+        icon={LucideIcons.LoaderCircle}
+        title="正在读取历史版本"
+        description="稍等片刻，正在准备只读预览。"
+        spinning
+      />
+    );
+  }
+
+  if (isEmpty) {
+    return (
+      <HistoryReaderState
+        icon={LucideIcons.History}
+        title="暂无历史版本"
+        description="停笔一段时间后，鹅的笔记会自动保存可回看的历史。"
+      />
+    );
+  }
+
+  if (selectedStatus === "missing") {
+    return (
+      <HistoryReaderState
+        icon={LucideIcons.FileQuestion}
+        title="此历史版本不可读取"
+        description="这条历史索引还在，但对应版本内容可能已被旧版数据或外部清理移除。"
+      />
+    );
+  }
+
+  if (selectedStatus === "error") {
+    return (
+      <HistoryReaderState
+        icon={LucideIcons.FileWarning}
+        title="此历史版本格式异常"
+        description="这条记录可能来自旧版格式或包含脏数据，已跳过渲染以避免白屏。"
+      />
+    );
+  }
 
   if (!(selectedContent && selectedVersionId)) {
     return (
-      <div className="h-full flex items-center justify-center text-xs text-muted-foreground/40">
-        {isEmpty ? "暂无历史版本可显示" : "选择左侧版本查看内容"}
-      </div>
+      <HistoryReaderState
+        icon={LucideIcons.MousePointerClick}
+        title="选择一个历史版本"
+        description="从左侧列表选择时间点后，这里会显示只读预览。"
+      />
     );
   }
 
   return (
-    <HistoryReadOnlyEditor
-      content={selectedContent}
-      versionKey={selectedVersionId}
-    />
+    <ErrorBoundary
+      resetKey={selectedVersionId}
+      fallback={(_, reset) => (
+        <HistoryReaderState
+          icon={LucideIcons.FileWarning}
+          title="此历史版本渲染失败"
+          description="已阻止历史视图白屏。可以重试，或切换左侧其他历史版本。"
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-1 h-8 gap-1.5 rounded-[10px] text-xs"
+              onClick={reset}
+            >
+              <LucideIcons.RotateCcw className="h-3.5 w-3.5" />
+              重试
+            </Button>
+          }
+        />
+      )}
+    >
+      <HistoryReadOnlyEditor
+        content={selectedContent}
+        versionKey={selectedVersionId}
+      />
+    </ErrorBoundary>
   );
 }

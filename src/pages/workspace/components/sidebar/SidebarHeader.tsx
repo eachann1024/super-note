@@ -26,6 +26,12 @@ export function SidebarHeader({
   const openTab = useTabs((state) => state.openTab);
   const openPreviewTab = useTabs((state) => state.openPreviewTab);
   const setActiveNotebook = useNotebooks((state) => state.setActiveNotebook);
+  const activeNotebookId = useNotebooks((state) => state.activeNotebookId);
+  const isLocalFolder = useNotebooks((state) =>
+    activeNotebookId
+      ? state.notebooks[activeNotebookId]?.source === "local-folder"
+      : false,
+  );
   const pinnedScrollerRef = useRef<HTMLDivElement>(null);
   const activePinnedRef = useRef<HTMLButtonElement | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
@@ -33,26 +39,28 @@ export function SidebarHeader({
   const [isOverflowing, setIsOverflowing] = useState(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const pinnedPages = useMemo(
-    () =>
-      Object.values(pages)
-        .filter((page) => !page.trashedAt && page.isPinned)
-        .sort((a, b) => {
-          const pinA = a.pinnedAt ?? 0;
-          const pinB = b.pinnedAt ?? 0;
-          if (pinA !== pinB) return pinB - pinA;
-          return b.updatedAt - a.updatedAt;
-        }),
-    [pages],
-  );
+  const pinnedPages = useMemo(() => {
+    if (isLocalFolder) return [];
+    return Object.values(pages)
+      .filter((page) => !page.trashedAt && page.isPinned)
+      .sort((a, b) => {
+        const pinA = a.pinnedAt ?? 0;
+        const pinB = b.pinnedAt ?? 0;
+        if (pinA !== pinB) return pinB - pinA;
+        return b.updatedAt - a.updatedAt;
+      });
+  }, [isLocalFolder, pages]);
 
-  const handlePinnedWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    const scroller = pinnedScrollerRef.current;
-    if (!scroller) return;
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-    scroller.scrollLeft += event.deltaY;
-    event.preventDefault();
-  }, []);
+  const handlePinnedWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      const scroller = pinnedScrollerRef.current;
+      if (!scroller) return;
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      scroller.scrollLeft += event.deltaY;
+      event.preventDefault();
+    },
+    [],
+  );
 
   const syncPinnedScrollState = useCallback(() => {
     const scroller = pinnedScrollerRef.current;
@@ -63,7 +71,10 @@ export function SidebarHeader({
       return;
     }
 
-    const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const maxScrollLeft = Math.max(
+      0,
+      scroller.scrollWidth - scroller.clientWidth,
+    );
     const currentLeft = scroller.scrollLeft;
     const threshold = 2;
 
@@ -72,17 +83,20 @@ export function SidebarHeader({
     setCanScrollRight(currentLeft < maxScrollLeft - threshold);
   }, []);
 
-  const scrollPinnedBy = useCallback((direction: "left" | "right") => {
-    const scroller = pinnedScrollerRef.current;
-    if (!scroller) return;
-    const step = Math.min(260, Math.max(120, scroller.clientWidth * 0.7));
-    scroller.scrollBy({
-      left: direction === "left" ? -step : step,
-      behavior: "smooth",
-    });
-    requestAnimationFrame(syncPinnedScrollState);
-    window.setTimeout(syncPinnedScrollState, 220);
-  }, [syncPinnedScrollState]);
+  const scrollPinnedBy = useCallback(
+    (direction: "left" | "right") => {
+      const scroller = pinnedScrollerRef.current;
+      if (!scroller) return;
+      const step = Math.min(260, Math.max(120, scroller.clientWidth * 0.7));
+      scroller.scrollBy({
+        left: direction === "left" ? -step : step,
+        behavior: "smooth",
+      });
+      requestAnimationFrame(syncPinnedScrollState);
+      window.setTimeout(syncPinnedScrollState, 220);
+    },
+    [syncPinnedScrollState],
+  );
 
   const stopAutoScroll = useCallback(() => {
     autoScrollDirectionRef.current = null;
@@ -108,7 +122,10 @@ export function SidebarHeader({
           return;
         }
 
-        const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+        const maxScrollLeft = Math.max(
+          0,
+          scroller.scrollWidth - scroller.clientWidth,
+        );
         if (maxScrollLeft <= 2) {
           stopAutoScroll();
           syncPinnedScrollState();
@@ -189,7 +206,11 @@ export function SidebarHeader({
   const pageHasVisibleContent = useCallback((page: Page): boolean => {
     const visit = (node: unknown): boolean => {
       if (!node || typeof node !== "object") return false;
-      const value = node as { text?: unknown; content?: unknown; type?: unknown };
+      const value = node as {
+        text?: unknown;
+        content?: unknown;
+        type?: unknown;
+      };
       if (typeof value.text === "string" && value.text.trim().length > 0) {
         return true;
       }
@@ -227,7 +248,9 @@ export function SidebarHeader({
             <SelectedIcon
               className={cn(
                 "h-4 w-4 transition-all duration-200",
-                isActive ? "text-[var(--goose-pin-accent)] scale-[1.15]" : "text-muted-foreground/85",
+                isActive
+                  ? "text-[var(--goose-pin-accent)] scale-[1.15]"
+                  : "text-muted-foreground/85",
               )}
             />
           );
@@ -246,20 +269,24 @@ export function SidebarHeader({
 
       if (page.isFolder) {
         return (
-        <LucideIcons.Folder
-          className={cn(
-            "h-4 w-4 transition-all duration-200",
-            isActive ? "text-[var(--goose-pin-accent)] scale-[1.15]" : "text-muted-foreground/80",
-          )}
-        />
-      );
-    }
+          <LucideIcons.Folder
+            className={cn(
+              "h-4 w-4 transition-all duration-200",
+              isActive
+                ? "text-[var(--goose-pin-accent)] scale-[1.15]"
+                : "text-muted-foreground/80",
+            )}
+          />
+        );
+      }
 
       return (
         <DefaultIcon
           className={cn(
             "h-4 w-4 transition-all duration-200",
-            isActive ? "text-[var(--goose-pin-accent)] scale-[1.15]" : "text-muted-foreground/80",
+            isActive
+              ? "text-[var(--goose-pin-accent)] scale-[1.15]"
+              : "text-muted-foreground/80",
           )}
         />
       );
@@ -289,7 +316,6 @@ export function SidebarHeader({
     ],
   );
 
-
   return (
     <>
       <div className="pl-0 pr-[9px] h-12 pt-0 flex items-start shrink-0">
@@ -299,114 +325,115 @@ export function SidebarHeader({
       </div>
 
       <div className="pl-0 pr-[9px] pb-2 pt-0">
-        <div className="group/pinned relative overflow-hidden rounded-full bg-[#F1F1F1] dark:bg-[hsl(var(--goose-selected-bg)/0.88)] px-1 py-1">
-          {dragGuide && (
-            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-full border border-primary/35 bg-[hsl(var(--background)/0.98)] px-3 text-[11px] font-medium text-primary shadow-sm backdrop-blur-sm">
-              {dragGuide.mode === "sort" && "拖到页面中部，可放入为子页面"}
-              {dragGuide.mode === "nest-ready" && "松手即可放入目标页面"}
-            </div>
-          )}
-          {pinnedPages.length === 0 ? (
-            <div className="h-8 px-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground/80">
-              <LucideIcons.Pin className="h-3.5 w-3.5" />
-              <span>暂无置顶页面</span>
-            </div>
-          ) : (
-            <div
-              ref={pinnedScrollerRef}
-              className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              onWheel={handlePinnedWheel}
-            >
-              {pinnedPages.map((page) => {
-                const isActive = highlightedPageId === page.id;
-                const title = getPageTitle(page);
-                return (
-                  <TooltipProvider key={page.id} delayDuration={600}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          ref={isActive ? activePinnedRef : null}
-                          type="button"
-                          className={cn(
-                            "h-8 w-8 shrink-0 rounded-full inline-flex items-center justify-center transition-all duration-200",
-                            "animate-in fade-in-0 zoom-in-95",
-                            // 不在按钮级用 scale：放大会超出 overflow 滚动容器被裁掉一角
-                            isActive
-                              ? "bg-[var(--goose-interactive-selected)] text-foreground shadow-sm"
-                              : "text-muted-foreground hover:bg-[var(--goose-interactive-hover)] hover:text-foreground",
-                          )}
-                          onClick={() => handleOpenPinnedPage(page.id)}
-                        >
-                          {renderPinnedIcon(page, isActive)}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">{title}</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                );
-              })}
-            </div>
-          )}
-
-          {pinnedPages.length > 0 && (
-            <>
+        {(pinnedPages.length > 0 || dragGuide) && (
+          <div className="group/pinned relative min-h-10 overflow-hidden rounded-full bg-[#F1F1F1] dark:bg-[hsl(var(--goose-selected-bg)/0.88)] px-1 py-1">
+            {dragGuide && (
+              <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-full border border-primary/35 bg-[hsl(var(--background)/0.98)] px-3 text-[11px] font-medium text-primary shadow-sm backdrop-blur-sm">
+                {dragGuide.mode === "sort" && "拖到页面中部，可放入为子页面"}
+                {dragGuide.mode === "nest-ready" && "松手即可放入目标页面"}
+              </div>
+            )}
+            {pinnedPages.length > 0 && (
               <div
-                className={cn(
-                  "pointer-events-none absolute left-1 top-1 bottom-1 z-10 w-5 rounded-l-full bg-gradient-to-r from-[#F1F1F1] to-transparent dark:from-[hsl(var(--goose-selected-bg)/0.88)] transition-opacity duration-200",
-                  canScrollLeft ? "opacity-100" : "opacity-0",
-                )}
-              />
-              <div
-                className={cn(
-                  "pointer-events-none absolute right-1 top-1 bottom-1 z-10 w-5 rounded-r-full bg-gradient-to-l from-[#F1F1F1] to-transparent dark:from-[hsl(var(--goose-selected-bg)/0.88)] transition-opacity duration-200",
-                  canScrollRight ? "opacity-100" : "opacity-0",
-                )}
-              />
-
-              <button
-                type="button"
-                aria-label="向左查看置顶图标"
-                onClick={() => scrollPinnedBy("left")}
-                onMouseEnter={() => startAutoScroll("left")}
-                onMouseLeave={stopAutoScroll}
-                onFocus={() => startAutoScroll("left")}
-                onBlur={stopAutoScroll}
-                className={cn(
-                  "absolute left-1 top-1/2 z-[11] -translate-y-1/2 h-6 w-6 rounded-full border border-border/30 bg-background/80 text-muted-foreground backdrop-blur-sm transition-all duration-150",
-                  "inline-flex items-center justify-center shadow-sm",
-                  isOverflowing && canScrollLeft
-                    ? "group-hover/pinned:opacity-100 group-focus-within/pinned:opacity-100 group-hover/pinned:translate-x-0 group-focus-within/pinned:translate-x-0"
-                    : "",
-                  canScrollLeft ? "opacity-0 -translate-x-1" : "opacity-0 -translate-x-2 pointer-events-none",
-                  "hover:bg-[var(--goose-interactive-hover)] hover:text-foreground",
-                )}
+                ref={pinnedScrollerRef}
+                className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                onWheel={handlePinnedWheel}
               >
-                <LucideIcons.ChevronLeft className="h-3.5 w-3.5" />
-              </button>
+                {pinnedPages.map((page) => {
+                  const isActive = highlightedPageId === page.id;
+                  const title = getPageTitle(page);
+                  return (
+                    <TooltipProvider key={page.id} delayDuration={600}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            ref={isActive ? activePinnedRef : null}
+                            type="button"
+                            className={cn(
+                              "h-8 w-8 shrink-0 rounded-full inline-flex items-center justify-center transition-all duration-200",
+                              "animate-in fade-in-0 zoom-in-95",
+                              // 不在按钮级用 scale：放大会超出 overflow 滚动容器被裁掉一角
+                              isActive
+                                ? "bg-[var(--goose-interactive-selected)] text-foreground shadow-sm"
+                                : "text-muted-foreground hover:bg-[var(--goose-interactive-hover)] hover:text-foreground",
+                            )}
+                            onClick={() => handleOpenPinnedPage(page.id)}
+                          >
+                            {renderPinnedIcon(page, isActive)}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">{title}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  );
+                })}
+              </div>
+            )}
 
-              <button
-                type="button"
-                aria-label="向右查看置顶图标"
-                onClick={() => scrollPinnedBy("right")}
-                onMouseEnter={() => startAutoScroll("right")}
-                onMouseLeave={stopAutoScroll}
-                onFocus={() => startAutoScroll("right")}
-                onBlur={stopAutoScroll}
-                className={cn(
-                  "absolute right-1 top-1/2 z-[11] -translate-y-1/2 h-6 w-6 rounded-full border border-border/30 bg-background/80 text-muted-foreground backdrop-blur-sm transition-all duration-150",
-                  "inline-flex items-center justify-center shadow-sm",
-                  isOverflowing && canScrollRight
-                    ? "group-hover/pinned:opacity-100 group-focus-within/pinned:opacity-100 group-hover/pinned:translate-x-0 group-focus-within/pinned:translate-x-0"
-                    : "",
-                  canScrollRight ? "opacity-0 translate-x-1" : "opacity-0 translate-x-2 pointer-events-none",
-                  "hover:bg-[var(--goose-interactive-hover)] hover:text-foreground",
-                )}
-              >
-                <LucideIcons.ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </>
-          )}
-        </div>
+            {pinnedPages.length > 0 && (
+              <>
+                <div
+                  className={cn(
+                    "pointer-events-none absolute left-1 top-1 bottom-1 z-10 w-5 rounded-l-full bg-gradient-to-r from-[#F1F1F1] to-transparent dark:from-[hsl(var(--goose-selected-bg)/0.88)] transition-opacity duration-200",
+                    canScrollLeft ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                <div
+                  className={cn(
+                    "pointer-events-none absolute right-1 top-1 bottom-1 z-10 w-5 rounded-r-full bg-gradient-to-l from-[#F1F1F1] to-transparent dark:from-[hsl(var(--goose-selected-bg)/0.88)] transition-opacity duration-200",
+                    canScrollRight ? "opacity-100" : "opacity-0",
+                  )}
+                />
+
+                <button
+                  type="button"
+                  aria-label="向左查看置顶图标"
+                  onClick={() => scrollPinnedBy("left")}
+                  onMouseEnter={() => startAutoScroll("left")}
+                  onMouseLeave={stopAutoScroll}
+                  onFocus={() => startAutoScroll("left")}
+                  onBlur={stopAutoScroll}
+                  className={cn(
+                    "absolute left-1 top-1/2 z-[11] -translate-y-1/2 h-6 w-6 rounded-full border border-border/30 bg-background/80 text-muted-foreground backdrop-blur-sm transition-all duration-150",
+                    "inline-flex items-center justify-center shadow-sm",
+                    isOverflowing && canScrollLeft
+                      ? "group-hover/pinned:opacity-100 group-focus-within/pinned:opacity-100 group-hover/pinned:translate-x-0 group-focus-within/pinned:translate-x-0"
+                      : "",
+                    canScrollLeft
+                      ? "opacity-0 -translate-x-1"
+                      : "opacity-0 -translate-x-2 pointer-events-none",
+                    "hover:bg-[var(--goose-interactive-hover)] hover:text-foreground",
+                  )}
+                >
+                  <LucideIcons.ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+
+                <button
+                  type="button"
+                  aria-label="向右查看置顶图标"
+                  onClick={() => scrollPinnedBy("right")}
+                  onMouseEnter={() => startAutoScroll("right")}
+                  onMouseLeave={stopAutoScroll}
+                  onFocus={() => startAutoScroll("right")}
+                  onBlur={stopAutoScroll}
+                  className={cn(
+                    "absolute right-1 top-1/2 z-[11] -translate-y-1/2 h-6 w-6 rounded-full border border-border/30 bg-background/80 text-muted-foreground backdrop-blur-sm transition-all duration-150",
+                    "inline-flex items-center justify-center shadow-sm",
+                    isOverflowing && canScrollRight
+                      ? "group-hover/pinned:opacity-100 group-focus-within/pinned:opacity-100 group-hover/pinned:translate-x-0 group-focus-within/pinned:translate-x-0"
+                      : "",
+                    canScrollRight
+                      ? "opacity-0 translate-x-1"
+                      : "opacity-0 translate-x-2 pointer-events-none",
+                    "hover:bg-[var(--goose-interactive-hover)] hover:text-foreground",
+                  )}
+                >
+                  <LucideIcons.ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </>
   );

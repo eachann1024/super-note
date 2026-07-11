@@ -167,6 +167,11 @@ export interface PagesState {
     title?: string;
     content?: JSONContent;
   }) => Promise<string | null>;
+  createLocalFolderRecord: (options: {
+    workspaceId: string;
+    parentId?: string;
+    title?: string;
+  }) => Promise<string | null>;
   writePageContent: (
     pageId: string,
     content: JSONContent,

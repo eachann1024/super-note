@@ -11,6 +11,33 @@
   word-break: break-word;
 }
 
+.notebook-ai-messages,
+.notebook-ai-message-text,
+.notebook-ai-message-text * {
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.notebook-ai-messages button,
+.notebook-ai-messages [role="button"],
+.notebook-ai-messages .notebook-ai-artifact-svg,
+.notebook-ai-messages .notebook-ai-artifact-svg * {
+  cursor: inherit;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.notebook-ai-messages ::selection {
+  background-color: rgba(35, 131, 226, 0.28);
+  color: inherit;
+}
+
+.dark .notebook-ai-messages ::selection {
+  background-color: rgba(35, 131, 226, 0.4);
+  color: inherit;
+}
+
 /* 标题在聊天窄栏里收敛字号（默认 text-3xl/2xl/xl 过大） */
 .ai-md [data-streamdown="heading-1"] {
   font-size: 1.25em;
@@ -99,4 +126,17 @@
   text-decoration: underline;
   text-decoration-color: hsl(var(--border));
   text-underline-offset: 2px;
+}
+
+/* ── 可视化 artifact：图小居中，图大保持原尺寸并横向滚动 ───────────── */
+
+.notebook-ai-artifact-svg > svg {
+  display: block;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 240px;
+  max-width: none;
+  height: auto;
+  max-height: 420px;
+  overflow: visible;
 }

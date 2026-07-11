@@ -12,6 +12,7 @@ import {
   getPreferredChartHeight,
 } from "./echarts/chartTheme";
 import { useEchartsLifecycle } from "./echarts/useEchartsLifecycle";
+import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 
 /* ── component ──────────────────────────────────────────────────── */
 
@@ -26,10 +27,7 @@ export const EChartsBlock = React.memo(
 
     const theme = useSettings((state) => state.theme);
     const editorFontSize = useSettings((state) => state.editorFontSize);
-
-    const isDark =
-      theme === "dark" ||
-      (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const isDark = useResolvedTheme(theme) === "dark";
     const editorScale = editorFontSize / EDITOR_FONT_SIZE_DEFAULT;
     const framePadding = Math.round(clamp(12 * editorScale, 10, 18));
     const contentWidth = Math.max(frameWidth - framePadding * 2, 0);

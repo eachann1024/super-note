@@ -18,6 +18,16 @@ const linkedInlineContent = [
   { type: "text", text: " now" },
 ];
 
+const sanitizedLinkedInlineContent = [
+  { type: "text", text: "Open ", styles: {} },
+  {
+    type: "link",
+    href: "https://example.com",
+    content: [{ type: "text", text: "Example", styles: {} }],
+  },
+  { type: "text", text: " now", styles: {} },
+];
+
 test("createEditorSafeContent preserves inline links", () => {
   const sanitizedParagraph = createEditorSafeContent(
     [{ type: "paragraph", content: linkedInlineContent }],
@@ -25,7 +35,7 @@ test("createEditorSafeContent preserves inline links", () => {
   );
 
   expect(sanitizedParagraph).toEqual([
-    { type: "paragraph", content: linkedInlineContent },
+    { type: "paragraph", content: sanitizedLinkedInlineContent },
   ]);
 
   const sanitizedTable = createEditorSafeContent(
@@ -46,7 +56,7 @@ test("createEditorSafeContent preserves inline links", () => {
       type: "table",
       content: {
         type: "tableContent",
-        rows: [{ cells: [linkedInlineContent] }],
+        rows: [{ cells: [sanitizedLinkedInlineContent] }],
       },
     },
   ]);

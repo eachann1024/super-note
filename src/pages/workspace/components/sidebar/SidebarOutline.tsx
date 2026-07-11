@@ -2,7 +2,11 @@ import type { EditorRef } from "@/components/editor/core/Editor";
 import { OutlinePanel } from "../outline/OutlinePanel";
 import { useHeadings } from "../outline/useHeadings";
 import type { HeadingItem } from "../outline/useHeadings";
-import { useActiveHeading } from "../outline/useActiveHeading";
+import {
+  getHeadingAnchorElement,
+  OUTLINE_SCROLL_TARGET_OFFSET,
+  useActiveHeading,
+} from "../outline/useActiveHeading";
 
 interface SidebarOutlineProps {
   editorRef?: React.RefObject<EditorRef | null>;
@@ -36,11 +40,15 @@ export function SidebarOutline({
     (blockId: string) => {
       const container = scrollContainerRef?.current;
       if (!container) return;
-      const el = container.querySelector(`[data-id="${blockId}"]`) as HTMLElement | null;
+      const el = getHeadingAnchorElement(container, blockId);
       if (!el) return;
       const containerRect = container.getBoundingClientRect();
       const elRect = el.getBoundingClientRect();
-      const targetScroll = container.scrollTop + elRect.top - containerRect.top - 24;
+      const targetScroll =
+        container.scrollTop +
+        elRect.top -
+        containerRect.top -
+        OUTLINE_SCROLL_TARGET_OFFSET;
       container.scrollTo({ top: Math.max(0, targetScroll), behavior: "smooth" });
     },
     [scrollContainerRef],

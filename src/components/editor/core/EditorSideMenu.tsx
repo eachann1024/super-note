@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   useBlockNoteEditor,
@@ -8,6 +8,7 @@ import {
 import { SideMenuExtension } from "@blocknote/core/extensions";
 import { Plus, GripVertical } from "lucide-react";
 import { cn } from "@/components/editor/utils/cn";
+import { useSidebarView } from "@/stores/useSidebarView";
 import {
   Tooltip,
   TooltipContent,
@@ -20,12 +21,16 @@ const altKeyLabel = isMac ? "⌥" : "Alt";
 
 /** 把手与正文左缘的间距（px） */
 const SIDE_MENU_CONTENT_GAP = 6;
+const SIDEBAR_INTERACTION_SELECTOR = ".workspace-sidebar-pane, .rct-main-tree";
+const SIDEBAR_HOVER_SELECTOR = ".workspace-sidebar-pane:hover, .rct-main-tree:hover";
 
 export function EditorSideMenu() {
   const editor = useBlockNoteEditor<any, any, any>();
   const sideMenu = useExtension(SideMenuExtension);
   const [addTipOpen, setAddTipOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [sidebarInteracting, setSidebarInteracting] = useState(false);
+  const sidebarCollapsed = useSidebarView((s) => s.sidebarCollapsed);
 
   const state = useExtensionState(SideMenuExtension, {
     selector: (s) =>
@@ -47,9 +52,39 @@ export function EditorSideMenu() {
   const isToggleableHeading =
     block?.type === "heading" &&
     Boolean(headingProps?.isToggleable ?? headingProps?.n);
+
+  useEffect(() => {
+    const updateSidebarInteracting = (target: EventTarget | null = document.activeElement) => {
+      const element = target instanceof Element ? target : null;
+      const activeElement = document.activeElement;
+      const next =
+        Boolean(element?.closest(SIDEBAR_INTERACTION_SELECTOR)) ||
+        Boolean(activeElement?.closest?.(SIDEBAR_INTERACTION_SELECTOR)) ||
+        Boolean(document.querySelector(SIDEBAR_HOVER_SELECTOR));
+      setSidebarInteracting(next);
+    };
+
+    const handlePointerMove = (event: PointerEvent) =>
+      updateSidebarInteracting(event.target);
+    const handleFocusChange = (event: FocusEvent) =>
+      updateSidebarInteracting(event.target);
+
+    document.addEventListener("pointermove", handlePointerMove, true);
+    document.addEventListener("focusin", handleFocusChange, true);
+    document.addEventListener("focusout", handleFocusChange, true);
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove, true);
+      document.removeEventListener("focusin", handleFocusChange, true);
+      document.removeEventListener("focusout", handleFocusChange, true);
+    };
+  }, []);
+
   // 先判定是否应显示，再更新位置/挂载 DOM，避免折叠标题上把手闪一下
   const shouldShow =
-    Boolean(state?.show && state.referencePos && block) && !isToggleableHeading;
+    Boolean(state?.show && state.referencePos && block) &&
+    !isToggleableHeading &&
+    !sidebarCollapsed &&
+    !sidebarInteracting;
 
   const handleAdd = useCallback(
     (e: React.MouseEvent) => {

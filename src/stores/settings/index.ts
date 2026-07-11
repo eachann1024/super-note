@@ -5,7 +5,9 @@ import { uToolsStorage } from '@/lib/storage'
 import type { Theme, CodeStyle, AISettings, UToolsSettings, DesktopSettings } from './types'
 import {
     normalizeCodeStyle,
+    resolveCodeTheme,
     normalizeUIFontSize,
+    normalizeAutoCloseInactiveTabsHours,
     normalizeAISettings,
     normalizeDesktopHotkeyStatus,
     mergeSearchProvidersWithDefaults,
@@ -68,31 +70,7 @@ async function applyNativeWindowTheme(theme: Theme, isDark: boolean) {
 function applyCodeStyle(codeStyle: CodeStyle) {
     const root = document.documentElement
     const isDark = root.classList.contains('dark')
-
-    let finalClass: string
-
-    switch (codeStyle) {
-        case 'default':
-            finalClass = isDark ? 'github-dark' : 'github-light'
-            break
-        case 'github':
-            finalClass = isDark ? 'github-dark' : 'github-light'
-            break
-        case 'modern':
-            finalClass = isDark ? 'one-dark' : 'one-light'
-            break
-        case 'night':
-            finalClass = isDark ? 'tokyo-night' : 'github-light-mod'
-            break
-        case 'nord':
-            finalClass = isDark ? 'nord' : 'nord-light'
-            break
-        case 'nord-light':
-            finalClass = isDark ? 'nord' : 'nord-light'
-            break
-        default:
-            finalClass = isDark ? 'github-dark' : 'github-light'
-    }
+    const finalClass = resolveCodeTheme(codeStyle, isDark)
 
     if (finalClass) {
         root.setAttribute('data-code-theme', finalClass)
@@ -221,6 +199,22 @@ export const useSettings = create<SettingsState>()(
                     if (typeof state.showRecentInSearch !== 'boolean') {
                         useSettings.setState({ showRecentInSearch: true })
                     }
+                    const normalizedPrivacy = {
+                        autoOpenLastNote:
+                            typeof state.privacy?.autoOpenLastNote === 'boolean'
+                                ? state.privacy.autoOpenLastNote
+                                : true,
+                        autoCloseInactiveTabs:
+                            typeof state.privacy?.autoCloseInactiveTabs === 'boolean'
+                                ? state.privacy.autoCloseInactiveTabs
+                                : false,
+                        autoCloseInactiveTabsHours: normalizeAutoCloseInactiveTabsHours(
+                            state.privacy?.autoCloseInactiveTabsHours,
+                        ),
+                    }
+                    if (JSON.stringify(state.privacy ?? null) !== JSON.stringify(normalizedPrivacy)) {
+                        useSettings.setState({ privacy: normalizedPrivacy })
+                    }
 
                     const normalizedCloseTabShortcut =
                         typeof state.closeTabShortcut === 'string'
@@ -277,24 +271,38 @@ export const useSettings = create<SettingsState>()(
                 }
 
                 if (state) {
+                    const normalizedLocalFolderFileManager =
+                        typeof state.localFolderFileManager === 'string'
+                            ? state.localFolderFileManager.trim()
+                            : ''
                     const normalizedLocalFolderExternalEditor =
                         typeof state.localFolderExternalEditor === 'string'
-                            ? state.localFolderExternalEditor
+                            ? state.localFolderExternalEditor.trim()
                             : ''
-                    if (state.localFolderExternalEditor !== normalizedLocalFolderExternalEditor) {
-                        useSettings.setState({ localFolderExternalEditor: normalizedLocalFolderExternalEditor })
+                    const normalizedLocalFolderTerminal =
+                        typeof state.localFolderTerminal === 'string'
+                            ? state.localFolderTerminal.trim()
+                            : ''
+                    const normalizedLocalFolderHiddenFolders =
+                        Array.isArray(state.localFolderHiddenFolders)
+                            ? state.localFolderHiddenFolders.filter(
+                                (item: unknown): item is string => typeof item === 'string' && item.length > 0
+                            )
+                            : ['assets']
+                    if (
+                        state.localFolderFileManager !== normalizedLocalFolderFileManager ||
+                        state.localFolderExternalEditor !== normalizedLocalFolderExternalEditor ||
+                        state.localFolderTerminal !== normalizedLocalFolderTerminal ||
+                        state.localFolderHiddenFolders !== normalizedLocalFolderHiddenFolders
+                    ) {
+                        useSettings.setState({
+                            localFolderFileManager: normalizedLocalFolderFileManager,
+                            localFolderExternalEditor: normalizedLocalFolderExternalEditor,
+                            localFolderTerminal: normalizedLocalFolderTerminal,
+                            localFolderHiddenFolders: normalizedLocalFolderHiddenFolders,
+                        })
                     }
                 }
-                if (state) {
-                    const normalizedEnterKeyBehavior =
-                        state.enterKeyBehavior === 'create-block' || state.enterKeyBehavior === 'save-exit'
-                            ? state.enterKeyBehavior
-                            : 'create-block'
-                    if (state.enterKeyBehavior !== normalizedEnterKeyBehavior) {
-                        useSettings.setState({ enterKeyBehavior: normalizedEnterKeyBehavior })
-                    }
-                }
-
                 // 标记 hydration 完成
                 useSettings.setState({ _hasHydrated: true })
             },
@@ -305,13 +313,18 @@ export const useSettings = create<SettingsState>()(
 // 监听系统主题变化
 if (typeof window !== 'undefined') {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    mediaQuery.addEventListener('change', () => {
+    const handleSystemThemeChange = () => {
         const { theme, codeStyle } = useSettings.getState()
         if (theme === 'system') {
             applyTheme('system')
         }
         applyCodeStyle(codeStyle)
-    })
+    }
+    if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', handleSystemThemeChange)
+    } else {
+        mediaQuery.addListener(handleSystemThemeChange)
+    }
 
     // 立即初始化主题（确保在 DOM 加载后立即应用）
     const initThemes = () => {
@@ -352,6 +365,9 @@ export {
     DEFAULT_SEARCH_HOTKEY,
     DEFAULT_CLOSE_TAB_SHORTCUT,
     DEFAULT_SEARCH_PANEL_CLOSE_SHORTCUT,
+    AUTO_CLOSE_INACTIVE_TABS_HOURS_MIN,
+    AUTO_CLOSE_INACTIVE_TABS_HOURS_MAX,
+    AUTO_CLOSE_INACTIVE_TABS_HOURS_DEFAULT,
     UTOOLS_WINDOW_HEIGHT_MIN,
     UTOOLS_WINDOW_HEIGHT_MAX,
     UTOOLS_WINDOW_HEIGHT_DEFAULT,

@@ -8,8 +8,38 @@
  * 网络 URL / data: / blob: 不经过 createObjectURL，原样返回，不缓存。
  */
 
+const MAX_OBJECT_URL_CACHE_SIZE = 256
+
 // 模块级缓存：ref → ObjectURL
 const objectUrlCache = new Map<string, string>()
+
+function revokeObjectUrl(url: string) {
+  try {
+    URL.revokeObjectURL(url)
+  } catch {
+    // ignore browser/runtime revoke differences
+  }
+}
+
+function rememberObjectUrl(cacheKey: string, objectUrl: string) {
+  objectUrlCache.set(cacheKey, objectUrl)
+
+  while (objectUrlCache.size > MAX_OBJECT_URL_CACHE_SIZE) {
+    const oldest = objectUrlCache.entries().next().value as
+      | [string, string]
+      | undefined
+    if (!oldest) return
+    objectUrlCache.delete(oldest[0])
+    revokeObjectUrl(oldest[1])
+  }
+}
+
+export function clearResolvedImageObjectUrlCache() {
+  for (const objectUrl of objectUrlCache.values()) {
+    revokeObjectUrl(objectUrl)
+  }
+  objectUrlCache.clear()
+}
 
 /**
  * 将图片引用解析为可在 <img src> 中使用的 URL。
@@ -54,7 +84,7 @@ export async function resolveImageRefToUrl(
       const blob = await readLocalFileAsBlobAsync(fullPath)
       if (blob) {
         const objectUrl = URL.createObjectURL(blob)
-        objectUrlCache.set(cacheKey, objectUrl)
+        rememberObjectUrl(cacheKey, objectUrl)
         return objectUrl
       }
     }
@@ -70,7 +100,7 @@ export async function resolveImageRefToUrl(
   const blob = await imageStorage.load(url)
   if (blob) {
     const objectUrl = URL.createObjectURL(blob)
-    objectUrlCache.set(url, objectUrl)
+    rememberObjectUrl(url, objectUrl)
     return objectUrl
   }
 

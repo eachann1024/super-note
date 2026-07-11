@@ -18,6 +18,11 @@ export function FavoritesSection({
   const pages = usePages((state) => state.pages);
   const reorderFavorites = usePages((state) => state.reorderFavorites);
   const activeNotebookId = useNotebooks((state) => state.activeNotebookId);
+  const isLocalFolder = useNotebooks((state) =>
+    activeNotebookId
+      ? state.notebooks[activeNotebookId]?.source === "local-folder"
+      : false,
+  );
   const favoritesCollapsed = useSidebarView((s) => s.favoritesCollapsed);
   const setFavoritesCollapsed = useSidebarView((s) => s.setFavoritesCollapsed);
 
@@ -61,7 +66,9 @@ export function FavoritesSection({
     [reorderFavorites],
   );
 
-  if (favorites.length === 0 || favoriteRootIds.length === 0) return null;
+  if (isLocalFolder || favorites.length === 0 || favoriteRootIds.length === 0) {
+    return null;
+  }
 
   return (
     <div className="py-1">

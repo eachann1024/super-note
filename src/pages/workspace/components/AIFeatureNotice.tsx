@@ -39,7 +39,7 @@ function createNoticeContent(handleClose: () => void) {
     >
       <p>· 输入框内按空格 → 唤起 AI</p>
       <p>· 选中文字 → 一键润色改写</p>
-      <p>支持 uTools AI 或自定义接入，前往设置配置。</p>
+      <p>支持自定义 AI 接入，前往设置配置。</p>
     </FeatureToastCard>
   );
 }

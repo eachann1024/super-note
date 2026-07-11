@@ -5,7 +5,6 @@
  *  - EdgeDropZone：顶/底边缘拖放区
  *  - PlaceholderRow：空文件夹占位行
  */
-import { toast } from "sonner";
 import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -214,6 +213,22 @@ export function SortablePageRow({
     }
   };
 
+  const handleHiddenArrowPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!hasChildren) return;
+    if (event.button !== 0 || event.ctrlKey) return;
+    onToggleOpen(page.id);
+  };
+
+  const handleHiddenArrowClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.detail === 0 && hasChildren) {
+      onToggleOpen(page.id);
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -255,9 +270,6 @@ export function SortablePageRow({
           )}
           onClick={(e) => {
             e.stopPropagation();
-            if (isLocalFolder && page.isFolder) {
-              return;
-            }
             if (rowClickTimerRef.current !== null) {
               window.clearTimeout(rowClickTimerRef.current);
             }
@@ -278,21 +290,12 @@ export function SortablePageRow({
               window.clearTimeout(rowClickTimerRef.current);
               rowClickTimerRef.current = null;
             }
-            if (isLocalFolder && page.isFolder) {
-              if (hasChildren) {
-                onToggleOpen(page.id);
-              } else {
-                toast.info("这个文件夹是空的", { position: "top-right" });
-              }
-              return;
-            }
             openPageFromSidebar(page.id, "permanent");
           }}
           onAuxClick={(e) => {
             if (e.button === 1) {
               e.preventDefault();
               e.stopPropagation();
-              if (isLocalFolder && page.isFolder) return;
               openPageFromSidebar(page.id, "permanent");
             }
           }}
@@ -324,22 +327,68 @@ export function SortablePageRow({
               </button>
             )}
 
-            <div
-              className="flex items-center justify-center w-5 h-5 shrink-0 mr-0.5 select-none"
-              onMouseDown={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {isLocalFolder ? (
-                <div className="flex items-center justify-center w-5 h-5">
-                  <LocalFileIcon
-                    page={page}
-                    iconName={iconName}
-                    isLocalFolder={isLocalFolder}
-                    hasChildren={hasChildren}
+            {hideExpandArrows ? (
+              hasChildren ? (
+                <button
+                  type="button"
+                  aria-label={item.isOpen ? "折叠子项" : "展开子项"}
+                  aria-expanded={item.isOpen}
+                  className="group/hidden-toggle relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] mr-0.5 transition-colors duration-150 hover:bg-[var(--goose-icon-chip-on-selected)] focus-visible:bg-[var(--goose-icon-chip-on-selected)] dark:hover:bg-[var(--goose-interactive-hover)] dark:focus-visible:bg-[var(--goose-interactive-hover)]"
+                  onPointerDown={handleHiddenArrowPointerDown}
+                  onClick={handleHiddenArrowClick}
+                  onDoubleClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDragStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  <span className="flex h-4 w-4 items-center justify-center transition-opacity duration-150 group-hover:opacity-0 group-focus-visible/hidden-toggle:opacity-0">
+                    <LocalFileIcon
+                      page={page}
+                      iconName={iconName}
+                      isLocalFolder={isLocalFolder}
+                      hasChildren={hasChildren}
+                    />
+                  </span>
+                  <LucideIcons.ChevronRight
+                    className={cn(
+                      "pointer-events-none absolute h-3.5 w-3.5 text-muted-foreground/80 opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-100 group-focus-visible/hidden-toggle:opacity-100",
+                      item.isOpen && "rotate-90",
+                    )}
                   />
-                </div>
+                </button>
               ) : (
+                <div className="pointer-events-none flex h-6 w-6 shrink-0 items-center justify-center mr-0.5">
+                  <div className="flex h-4 w-4 items-center justify-center">
+                    <LocalFileIcon
+                      page={page}
+                      iconName={iconName}
+                      isLocalFolder={isLocalFolder}
+                      hasChildren={hasChildren}
+                    />
+                  </div>
+                </div>
+              )
+            ) : (
+              <div
+                className="flex items-center justify-center w-5 h-5 shrink-0 mr-0.5 select-none"
+                onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {isLocalFolder ? (
+                  <div className="flex items-center justify-center w-5 h-5">
+                    <LocalFileIcon
+                      page={page}
+                      iconName={iconName}
+                      isLocalFolder={isLocalFolder}
+                      hasChildren={hasChildren}
+                    />
+                  </div>
+                ) : (
                 <IconSelector
                   value={iconName}
                   onChange={(newIcon) => updatePage(page.id, { icon: newIcon as string })}
@@ -355,8 +404,9 @@ export function SortablePageRow({
                     </div>
                   </div>
                 </IconSelector>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             <InlineOverflowRevealText
               className="text-sm"

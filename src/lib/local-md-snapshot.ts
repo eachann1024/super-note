@@ -73,6 +73,12 @@ export function deleteLocalMdSnapshot(absPath: string): void {
   snapshotMap.delete(absPath);
 }
 
+/** 清空进程内的本地文件快照与自写标记，不会删除或改写任何磁盘文件。 */
+export function clearAllLocalMdSnapshots(): void {
+  snapshotMap.clear();
+  selfWriteTimestamps.clear();
+}
+
 /**
  * 检查磁盘当前内容是否与快照一致（规范化后比较）。
  * 返回 true 表示磁盘未被外部修改，false 表示已被外部修改或快照不存在。

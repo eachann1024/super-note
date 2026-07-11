@@ -69,7 +69,7 @@ export function normalizeAiMarkdown(markdown: string): string {
  */
 export function buildAiPageContent(title: string, markdown: string): JSONContent {
   const stripped = normalizeAiMarkdown(markdown)
-    .replace(/^\s*#[^\n]*\n?/, "")
+    .replace(/^\s*#(?!#)[^\n]*\n?/, "")
     .trim();
 
   const bodyBlocks: BlockNoteContent = stripped

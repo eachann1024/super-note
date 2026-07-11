@@ -97,6 +97,14 @@ function getRelativeAssetPath(filename: string, depth: number): string {
   return `${prefix}assets/${filename}`;
 }
 
+function getBundledAssetName(src: string): string | null {
+  const normalized = src.replace(/\\/g, "/");
+  const match = normalized.match(
+    /^(?:\.\/|(?:\.\.\/)+)?assets\/([^?#]+)(?:[?#].*)?$/,
+  );
+  return match?.[1] ?? null;
+}
+
 const EXPORTABLE_ASSET_BLOCK_TYPES = new Set([
   "image",
   "imageResize",
@@ -287,6 +295,102 @@ export interface ExportOptions {
   notebookIds: string[];
 }
 
+export interface NotebookImportInspection {
+  source: "metadata" | "folders";
+  notebookCount: number;
+  pageCount: number;
+}
+
+/**
+ * 在覆盖本地数据前只读校验导入包，确保它至少包含一份可恢复的记事本数据。
+ * 该函数不会创建记事本、页面或历史记录。
+ */
+export async function inspectNotebookImportZip(
+  zipBlob: Blob,
+): Promise<NotebookImportInspection> {
+  const { default: JSZip } = await import("jszip");
+  let zip: JSZipNs;
+  try {
+    zip = await JSZip.loadAsync(await zipBlob.arrayBuffer());
+  } catch (error) {
+    throw new Error("备份文件不是有效的 ZIP 包", { cause: error });
+  }
+
+  const metaFile = zip.file("backup-metadata.json");
+  if (metaFile) {
+    let meta: unknown;
+    try {
+      meta = JSON.parse(await metaFile.async("text"));
+    } catch (error) {
+      throw new Error("备份元数据已损坏", { cause: error });
+    }
+
+    if (!meta || typeof meta !== "object") {
+      throw new Error("备份元数据格式无效");
+    }
+    const notebooks = (meta as { notebooks?: unknown }).notebooks;
+    const pages = (meta as { pages?: unknown }).pages;
+    if (!Array.isArray(notebooks) || notebooks.length === 0 || !Array.isArray(pages)) {
+      throw new Error("备份元数据缺少记事本或页面列表");
+    }
+    if (
+      notebooks.some((notebook) => {
+        if (!notebook || typeof notebook !== "object") return true;
+        const candidate = notebook as { id?: unknown; name?: unknown };
+        return (
+          typeof candidate.id !== "string" ||
+          !candidate.id.trim() ||
+          typeof candidate.name !== "string" ||
+          !candidate.name.trim()
+        );
+      })
+    ) {
+      throw new Error("备份中包含无效的记事本信息");
+    }
+    const notebookIds = new Set(
+      notebooks.map((notebook) => (notebook as { id: string }).id),
+    );
+    if (
+      pages.some((page) => {
+        if (!page || typeof page !== "object") return true;
+        const workspaceId = (page as { workspaceId?: unknown }).workspaceId;
+        return (
+          typeof workspaceId !== "string" ||
+          !workspaceId.trim() ||
+          !notebookIds.has(workspaceId)
+        );
+      })
+    ) {
+      throw new Error("备份中包含无效的页面信息");
+    }
+    return {
+      source: "metadata",
+      notebookCount: notebooks.length,
+      pageCount: pages.length,
+    };
+  }
+
+  const notebookNames = new Set<string>();
+  let pageCount = 0;
+  zip.forEach((path, entry) => {
+    if (entry.dir) return;
+    const parts = path.split("/");
+    if (parts.length < 2 || parts[0] === "assets" || parts[1] === "assets") return;
+    const extension = path.split(".").pop()?.toLowerCase();
+    if (extension !== "md" && extension !== "json") return;
+    notebookNames.add(parts[0]);
+    pageCount += 1;
+  });
+  if (notebookNames.size === 0 || pageCount === 0) {
+    throw new Error("ZIP 中没有可恢复的鹅的笔记数据");
+  }
+  return {
+    source: "folders",
+    notebookCount: notebookNames.size,
+    pageCount,
+  };
+}
+
 export async function generateExportZip(
   options: ExportOptions,
   notebooksMap: Record<string, { name: string; localPath?: string }>,
@@ -358,6 +462,7 @@ export async function generateExportZip(
           content = await buildExportMarkdown(
             pageClone,
             pageClone.content,
+            { includeTitleHeading: false },
           );
           extension = ".md";
           break;
@@ -370,7 +475,7 @@ export async function generateExportZip(
           content = renderExportHtml(
             getPageTitle(pageClone),
             bodyHtml,
-            !pageClone.localFilePath
+            false,
           );
           extension = ".html";
           break;
@@ -548,14 +653,12 @@ export async function importNotebooksFromZip(
         block.props?.url
       ) {
         const src = block.props.url as string;
-        if (src.includes("assets/")) {
-          const filename = src.split("assets/").pop();
-          if (filename) {
-            // 优先从笔记本内 assets 查找，再从根级 assets 查找
-            const dataUrl = notebookAssetMap.get(filename) || rootAssetMap.get(filename);
-            if (dataUrl) {
-              block.props.url = dataUrl;
-            }
+        const filename = getBundledAssetName(src);
+        if (filename) {
+          // 优先从笔记本内 assets 查找，再从根级 assets 查找
+          const dataUrl = notebookAssetMap.get(filename) || rootAssetMap.get(filename);
+          if (dataUrl) {
+            block.props.url = dataUrl;
           }
         }
       }
@@ -573,6 +676,7 @@ export async function importNotebooksFromZip(
           onCreateNotebook(nb.name, nb.icon || "BookOpen", nb.id);
         }
 
+        const importedPageIdMap = new Map<string, string>();
         const notebookAssetMaps = new Map<string, Map<string, string>>();
         for (const nb of meta.notebooks) {
           const assetMap = await loadAssetsFromFolder(
@@ -583,11 +687,21 @@ export async function importNotebooksFromZip(
 
         for (const page of meta.pages) {
           const pageData = { ...page };
+          const sourcePageId = typeof page.id === "string" ? page.id : null;
+          delete (pageData as any).localFilePath;
           const assetMap = notebookAssetMaps.get(page.workspaceId);
           if (pageData.content && assetMap) {
             restoreBundledAssets(pageData.content, assetMap);
           }
-          await onCreatePage(pageData, page.workspaceId, page.parentId, page.id);
+          const createdPageId = await onCreatePage(
+            pageData,
+            page.workspaceId,
+            page.parentId,
+            page.id,
+          );
+          if (sourcePageId) {
+            importedPageIdMap.set(sourcePageId, createdPageId);
+          }
         }
 
         // 还原并合并历史记录数据到本地数据库
@@ -595,8 +709,9 @@ export async function importNotebooksFromZip(
           const { resolveHistoryBackend } = await import("@/lib/history/backend");
           const MAX_VERSIONS_PER_PAGE = 50;
 
-          for (const [pageId, historyItem] of Object.entries(meta.history) as [string, any][]) {
+          for (const [sourcePageId, historyItem] of Object.entries(meta.history) as [string, any][]) {
             try {
+              const pageId = importedPageIdMap.get(sourcePageId) ?? sourcePageId;
               const backend = resolveHistoryBackend(pageId);
               const localIndex = await backend.loadIndex(pageId);
               const importedIndex = historyItem.index;
@@ -626,12 +741,18 @@ export async function importNotebooksFromZip(
               // 2. 超出数量限制裁剪（淘汰最旧的非 Milestone）
               const evictedVersionIds: string[] = [];
               if (mergedVersions.length > MAX_VERSIONS_PER_PAGE) {
-                while (mergedVersions.length > MAX_VERSIONS_PER_PAGE) {
-                  const evictIdx = mergedVersions.findIndex((v) => !v.isMilestone);
-                  if (evictIdx === -1) break;
-                  const evicted = mergedVersions[evictIdx];
-                  evictedVersionIds.push(evicted.versionId);
-                  mergedVersions = mergedVersions.filter((_, i) => i !== evictIdx);
+                const evictCount = mergedVersions.length - MAX_VERSIONS_PER_PAGE;
+                evictedVersionIds.push(
+                  ...mergedVersions
+                    .filter((v) => !v.isMilestone)
+                    .slice(0, evictCount)
+                    .map((v) => v.versionId),
+                );
+                if (evictedVersionIds.length > 0) {
+                  const evictedSet = new Set(evictedVersionIds);
+                  mergedVersions = mergedVersions.filter(
+                    (v) => !evictedSet.has(v.versionId),
+                  );
                 }
               }
 
@@ -652,7 +773,7 @@ export async function importNotebooksFromZip(
                 const activeVersionIds = new Set(mergedVersions.map((v) => v.versionId));
                 for (const version of importedVersions) {
                   if (activeVersionIds.has(version.versionId)) {
-                    await backend.saveVersion(version);
+                    await backend.saveVersion({ ...version, pageId });
                   }
                 }
               }
@@ -662,7 +783,7 @@ export async function importNotebooksFromZip(
                 await backend.removeVersion(pageId, evictedId);
               }
             } catch (err) {
-              console.error(`Failed to restore and merge history for page ${pageId}:`, err);
+              console.error(`Failed to restore and merge history for page ${sourcePageId}:`, err);
             }
           }
         }

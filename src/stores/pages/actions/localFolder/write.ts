@@ -233,6 +233,37 @@ export const saveLocalPageContentAction = async (
   // 先收集需要落盘的图片，真正有图片要写时才 mkdir——
   // 否则纯打开/flush（内容未变走 diff 跳过）也会在用户目录凭空创建 assets 文件夹。
   const pendingImageWrites: Array<{ imagePath: string; base64Data: string }> = [];
+  const hasExternalDiskChange = async (source: "pre-save" | "pre-write") => {
+    try {
+      let diskCurrentContent: string | null = null;
+      if (window.gooseFs?.readFileStatAsync) {
+        const r = await window.gooseFs.readFileStatAsync(filePath);
+        diskCurrentContent = r.ok ? (r.content ?? "") : null;
+      } else if (window.gooseFs?.readFileStat) {
+        const r = window.gooseFs.readFileStat(filePath);
+        diskCurrentContent = r.ok ? (r.content ?? "") : null;
+      } else if (window.gooseFs?.readFileAsync) {
+        diskCurrentContent = await window.gooseFs.readFileAsync(filePath);
+      } else if (window.gooseFs?.readFile) {
+        diskCurrentContent = window.gooseFs.readFile(filePath);
+      }
+
+      if (
+        diskCurrentContent !== null &&
+        !isDiskContentMatchingSnapshot(filePath, diskCurrentContent)
+      ) {
+        window.dispatchEvent(
+          new CustomEvent("goose-note:local-file-conflict", {
+            detail: { pageId, filePath, source },
+          }),
+        );
+        return true;
+      }
+    } catch {
+      // 读磁盘失败时放行（网络文件系统等异常情况下不阻断写盘）
+    }
+    return false;
+  };
 
   const processImages = (value: unknown) => {
     if (Array.isArray(value)) {
@@ -334,35 +365,7 @@ export const saveLocalPageContentAction = async (
   // 读一次磁盘当前内容，与快照比较（规范化后），不一致 = 外部已改 → 不写盘，触发冲突处理。
   // 这比仅与 store 内容比较更安全：保证不会静默覆盖外部编辑。
   if (!options?.force) {
-    try {
-      let diskCurrentContent: string | null = null;
-      if (window.gooseFs?.readFileStatAsync) {
-        const r = await window.gooseFs.readFileStatAsync(filePath);
-        diskCurrentContent = r.ok ? (r.content ?? "") : null;
-      } else if (window.gooseFs?.readFileStat) {
-        const r = window.gooseFs.readFileStat(filePath);
-        diskCurrentContent = r.ok ? (r.content ?? "") : null;
-      } else if (window.gooseFs?.readFileAsync) {
-        diskCurrentContent = await window.gooseFs.readFileAsync(filePath);
-      } else if (window.gooseFs?.readFile) {
-        diskCurrentContent = window.gooseFs.readFile(filePath);
-      }
-
-      if (
-        diskCurrentContent !== null &&
-        !isDiskContentMatchingSnapshot(filePath, diskCurrentContent)
-      ) {
-        // 外部已修改磁盘文件 → 触发冲突 UX，不写盘
-        window.dispatchEvent(
-          new CustomEvent("goose-note:local-file-conflict", {
-            detail: { pageId, filePath, source: "pre-save" },
-          }),
-        );
-        return false;
-      }
-    } catch {
-      // 读磁盘失败时放行（网络文件系统等异常情况下不阻断写盘）
-    }
+    if (await hasExternalDiskChange("pre-save")) return false;
   }
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -380,6 +383,11 @@ export const saveLocalPageContentAction = async (
         return Promise.resolve(window.gooseFs?.writeFile(imagePath, base64Data));
       }),
     );
+  }
+
+  // assets 写入和正文写盘之间仍可能被外部编辑器抢写；正文写入前再比对一次。
+  if (!options?.force && (await hasExternalDiskChange("pre-write"))) {
+    return false;
   }
 
   // 写盘前标记自写：fs.watch 对本次写入触发的 change 事件（自写回声）

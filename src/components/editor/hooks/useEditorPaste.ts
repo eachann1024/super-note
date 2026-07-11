@@ -4,6 +4,7 @@ import { useCreateBlockNote } from "@blocknote/react";
 import {
   isValidUrl,
   looksLikeBlockStructure,
+  looksLikeMermaidDiagram,
   looksLikeMarkdownFragment,
   normalizeMarkdownPasteText,
   parseMarkdownLink,
@@ -35,6 +36,13 @@ export function useEditorPaste({
       const plainText = normalizeMarkdownPasteText(
         clipboard.getData("text/plain"),
       );
+
+      if (looksLikeMermaidDiagram(plainText)) {
+        event.preventDefault();
+        event.stopPropagation();
+        editor.pasteMarkdown(`\`\`\`mermaid\n${plainText.trim()}\n\`\`\``);
+        return;
+      }
 
       // ===== 标题一隔离：光标在「文档标题(物理首块 H1)」时粘贴「块结构」=====
       // 标题一是特殊存在，必须保持独立(恒为物理首块 H1、不被注入图片/列表/代码等结构)。

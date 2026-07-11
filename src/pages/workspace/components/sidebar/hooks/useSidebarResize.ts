@@ -1,4 +1,4 @@
-const SIDEBAR_MIN_WIDTH = 150;
+const SIDEBAR_MIN_WIDTH = 170;
 
 interface UseSidebarResizeOptions {
   disableResize?: boolean;

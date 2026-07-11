@@ -40,6 +40,7 @@ export function reconcileSlashSuggestionMenu(
 
   const view = editor.prosemirrorView;
   if (!view) return;
+  if (view.composing) return;
 
   const { selection } = view.state;
   if (!selection.empty) return;
@@ -56,6 +57,11 @@ export function reconcileSlashSuggestionMenu(
 
   const trigger = SLASH_TRIGGERS.find((t) => parent.textContent.startsWith(t));
   if (!trigger) return;
+  const query = parent.textContent.slice(trigger.length);
+  // Local paths such as `/Users/name/project` also start with `/`, but they
+  // are content, not slash-command queries. Touching selection while IME is
+  // settling can make those long path lines visually flicker.
+  if (query.includes("/") || query.includes("\\")) return;
 
   const blockStart = $from.start();
   const caret = selection.from;
