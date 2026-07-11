@@ -9,13 +9,14 @@ import {
 } from "@/components/ui/tooltip";
 import { saveBlobAndReveal } from "@/lib/export/fileSave";
 import { shell } from "@/lib/utools/shell";
+import type { ArtifactInsertResult } from "./insertArtifact";
 
 interface ArtifactActionsProps {
   copySource: string;
   downloadSource: string;
   filename: string;
   mimeType: string;
-  onInsert?: () => Promise<boolean> | boolean;
+  onInsert?: () => Promise<ArtifactInsertResult> | ArtifactInsertResult;
 }
 
 async function copyText(text: string) {
@@ -73,7 +74,9 @@ export function ArtifactActions({
               className="h-7 w-7 rounded-[7px] text-muted-foreground hover:text-foreground"
               aria-label="下载 SVG"
               disabled={!downloadSource}
-              onClick={() => void downloadText(downloadSource, filename, mimeType)}
+              onClick={() =>
+                void downloadText(downloadSource, filename, mimeType)
+              }
             >
               <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
             </Button>
@@ -90,8 +93,10 @@ export function ArtifactActions({
                 className="h-7 w-7 rounded-[7px] text-muted-foreground hover:text-foreground"
                 aria-label="插入当前笔记"
                 onClick={async () => {
-                  const ok = await onInsert();
-                  toast[ok ? "success" : "error"](ok ? "已插入当前笔记" : "未找到当前笔记");
+                  const result = await onInsert();
+                  toast[result.ok ? "success" : "error"](
+                    result.ok ? "已插入当前笔记" : result.error,
+                  );
                 }}
               >
                 <FilePlus2 className="h-3.5 w-3.5" strokeWidth={1.75} />

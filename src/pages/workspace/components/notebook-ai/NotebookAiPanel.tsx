@@ -6,12 +6,21 @@
  * - 每轮发送绑定当前活动页签 pageId，避免新建/切换页面影响当前请求
  * - 流式写入页面：handleStreamingWritePart + cleanupWriterSession
  */
-import { useEffect, useRef, useCallback, useMemo, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { useChat } from "@ai-sdk/react";
-import { X, Trash2, Bot, CircleAlert } from "lucide-react";
+import { X, Plus, Bot, CircleAlert } from "lucide-react";
+import { toast } from "sonner";
 import type { RefObject } from "react";
 import type { EditorRef } from "@/components/editor/core/Editor";
 import { useNotebooks } from "@/stores/useNotebooks";
+import { usePages } from "@/stores/usePages";
 import { useNotebookAiChats } from "@/stores/useNotebookAiChats";
 import { buildTransport } from "@/lib/notebook-ai/transport";
 import {
@@ -26,17 +35,32 @@ import {
   getNotebookAiReferenceSuggestions,
 } from "@/lib/notebook-ai/context";
 import { sanitizeNotebookAiMessages } from "@/lib/notebook-ai/messageUtils";
+import {
+  applyBlockTypeTransformToEditor,
+  createPageBodyBlockTypeTransformSnapshot,
+  hasWholePageBlockTypeTransformScope,
+  isBlockTypeTransformSelectionSnapshot,
+  planBlockTypeTransform,
+  resolveBlockTypeTransformIntent,
+  type BlockTypeTransformBlock,
+  type BlockTypeTransformSelectionSnapshot,
+} from "@/lib/ai-write";
 import { ChatMessages } from "./ChatMessages";
 import { Composer } from "./Composer";
 import { usePanelWidth } from "./usePanelWidth";
+import { ConversationHistoryPopover } from "./ConversationHistoryPopover";
+import type { NotebookAiPanelSelectionCapture } from "./useNotebookAiPanel";
 import type { AiComposerPayload } from "@/components/editor/ai/composer/referenceLookup";
 import type { ChatTransport } from "ai";
 import type { NotebookAiMessage } from "@/lib/notebook-ai/types";
+import type { JSONContent, Page } from "@/types";
 
 interface NotebookAiPanelProps {
   notebookId: string;
   onClose: () => void;
   editorRef?: RefObject<EditorRef | null>;
+  capturedSelection?: NotebookAiPanelSelectionCapture | null;
+  onConsumeCapturedSelection?: () => void;
 }
 
 const NOTEBOOK_AI_PLACEHOLDER_HINTS = [
@@ -52,10 +76,50 @@ function formatChatError(error: Error): string {
   return message || "本轮请求失败，请稍后重试。";
 }
 
+function createChatMessageId(prefix: string) {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return `${prefix}-${globalThis.crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getPageBlocks(content: unknown): BlockTypeTransformBlock[] {
+  if (Array.isArray(content)) {
+    return content as BlockTypeTransformBlock[];
+  }
+  if (
+    content &&
+    typeof content === "object" &&
+    Array.isArray((content as { content?: unknown }).content)
+  ) {
+    return (content as { content: BlockTypeTransformBlock[] }).content;
+  }
+  return [];
+}
+
+function getTransformTargetError(
+  page: Page | undefined,
+  notebookId: string,
+): string | null {
+  if (!page) return "当前页面不存在，未转换待办事项。";
+  if (page.workspaceId !== notebookId) {
+    return "当前页面不属于这个记事本，未转换待办事项。";
+  }
+  if (page.isFolder) return "文件夹不能转换为待办事项。";
+  if (page.trashedAt) return "回收站页面不能被修改。";
+  if (page.isLocked) return "页面已锁定，未转换待办事项。";
+  if (page.localFilePath && page.localReadState === "error") {
+    return "本地页面读取失败，未转换待办事项。";
+  }
+  return null;
+}
+
 export function NotebookAiPanel({
   notebookId,
   onClose,
   editorRef,
+  capturedSelection,
+  onConsumeCapturedSelection,
 }: NotebookAiPanelProps) {
   const { notebooks } = useNotebooks();
   const notebook = notebooks[notebookId];
@@ -64,14 +128,25 @@ export function NotebookAiPanel({
   const { width, onDragHandleMouseDown } = usePanelWidth();
   const requestCurrentPageIdRef = useRef<string | null>(null);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [isApplyingTransform, setIsApplyingTransform] = useState(false);
+  const [conversationId, setConversationId] = useState(() => {
+    const chats = useNotebookAiChats.getState();
+    return (
+      chats.getActiveConversationId(notebookId) ??
+      chats.createConversation(notebookId)
+    );
+  });
 
   // 检查模型是否可用（用于引导文案）
   const modelCheck = buildLanguageModel();
 
   // 持久化消息
   const persistedMessages = useMemo(
-    () => useNotebookAiChats.getState().getMessages(notebookId),
-    [notebookId],
+    () =>
+      useNotebookAiChats
+        .getState()
+        .getConversationMessages(notebookId, conversationId),
+    [notebookId, conversationId],
   );
 
   // useChat 只在 chat id 改变时重建 Chat；transport 必须保持稳定，
@@ -116,29 +191,42 @@ export function NotebookAiPanel({
     clearError,
   } = useChat<NotebookAiMessage>({
     transport,
-    id: `notebook-ai-${notebookId}`,
+    id: `notebook-ai-${notebookId}-${conversationId}`,
     messages: persistedMessages,
     onFinish: ({ messages: finishedMessages }) => {
       const cleanedMessages = sanitizeNotebookAiMessages(finishedMessages);
-      useNotebookAiChats.getState().setMessages(notebookId, cleanedMessages);
+      useNotebookAiChats
+        .getState()
+        .setMessages(notebookId, conversationId, cleanedMessages);
       queueMicrotask(() => setMessages(cleanedMessages));
     },
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
+  const isBusy = isStreaming || isApplyingTransform;
   const unavailableReason = !modelCheck.ok ? modelCheck.reason : undefined;
 
   useEffect(() => {
-    if (unavailableReason || isStreaming) return;
+    setMessages(
+      useNotebookAiChats
+        .getState()
+        .getConversationMessages(notebookId, conversationId),
+    );
+    clearError();
+    requestCurrentPageIdRef.current = null;
+  }, [notebookId, conversationId, setMessages, clearError]);
+
+  useEffect(() => {
+    if (unavailableReason || isBusy) return;
 
     const timer = window.setInterval(() => {
-      setPlaceholderIndex((index) => (
-        (index + 1) % NOTEBOOK_AI_PLACEHOLDER_HINTS.length
-      ));
+      setPlaceholderIndex(
+        (index) => (index + 1) % NOTEBOOK_AI_PLACEHOLDER_HINTS.length,
+      );
     }, 4500);
 
     return () => window.clearInterval(timer);
-  }, [unavailableReason, isStreaming]);
+  }, [unavailableReason, isBusy]);
 
   // 流式写入页面
   useEffect(() => {
@@ -147,10 +235,7 @@ export function NotebookAiPanel({
     if (!lastMsg || lastMsg.role !== "assistant") return;
 
     for (const part of lastMsg.parts ?? []) {
-      if (
-        part.type === "tool-createPage" ||
-        part.type === "tool-updatePage"
-      ) {
+      if (part.type === "tool-createPage" || part.type === "tool-updatePage") {
         void handleStreamingWritePart(part as StreamingWritePart, {
           notebookId,
           currentPageId: requestCurrentPageIdRef.current,
@@ -169,7 +254,9 @@ export function NotebookAiPanel({
           part.type === "tool-createPage" ||
           part.type === "tool-updatePage"
         ) {
-          const toolCallId = (part as Record<string, unknown>).toolCallId as string | undefined;
+          const toolCallId = (part as Record<string, unknown>).toolCallId as
+            | string
+            | undefined;
           if (toolCallId) cleanupWriterSession(toolCallId);
         }
       }
@@ -188,54 +275,275 @@ export function NotebookAiPanel({
 
   const composerPlaceholder = unavailableReason
     ? "请先在设置中配置 AI 模型"
-    : isStreaming
+    : isBusy
       ? "正在生成结果…"
       : NOTEBOOK_AI_PLACEHOLDER_HINTS[placeholderIndex];
 
   const handleSend = useCallback(
     (payload: AiComposerPayload) => {
-      if (isStreaming || unavailableReason) return false;
+      if (isBusy || unavailableReason) return false;
 
       const displayText = payload.promptText.trim();
       if (!displayText) return false;
 
       const currentPageId = getCurrentNotebookAiPageId(notebookId);
-      requestCurrentPageIdRef.current = currentPageId;
-
+      const transformIntent = resolveBlockTypeTransformIntent(displayText);
       const { modelText, metadata } = buildNotebookAiUserMessage({
         payload,
         notebookId,
         currentPageId,
       });
-
       const cleanedMessages = sanitizeNotebookAiMessages(messages);
+
+      if (transformIntent) {
+        if (!currentPageId) {
+          toast.error("请先打开要转换的页面。");
+          return false;
+        }
+        if (
+          payload.references.some(
+            (reference) =>
+              Boolean(reference.pageId) && reference.pageId !== currentPageId,
+          )
+        ) {
+          toast.error(
+            "待办转换不能同时指向其它页面；请先打开目标页，或移除 @ 引用。",
+          );
+          return false;
+        }
+
+        const page = usePages.getState().pages[currentPageId];
+        const targetError = getTransformTargetError(page, notebookId);
+        if (targetError) {
+          toast.error(targetError);
+          return false;
+        }
+        if (!page) return false;
+
+        let snapshot: BlockTypeTransformSelectionSnapshot;
+
+        try {
+          if (capturedSelection) {
+            if (
+              capturedSelection.version !== 1 ||
+              capturedSelection.pageId !== currentPageId ||
+              !isBlockTypeTransformSelectionSnapshot(
+                capturedSelection.selection,
+              ) ||
+              capturedSelection.selection.pageId !== currentPageId
+            ) {
+              throw new Error("选中的内容已不在当前页面，请重新选择后再试。");
+            }
+            snapshot = capturedSelection.selection;
+          } else {
+            if (!hasWholePageBlockTypeTransformScope(displayText)) {
+              throw new Error(
+                "请先选中要转换的完整内容，或明确输入“把当前页全部内容改成待办事项”。",
+              );
+            }
+            const activeEditor = editorRef?.current?.editor;
+            const currentBlocks =
+              activeEditor && usePages.getState().activePageId === currentPageId
+                ? (activeEditor.document as BlockTypeTransformBlock[])
+                : getPageBlocks(page.content);
+            snapshot = createPageBodyBlockTypeTransformSnapshot(
+              currentPageId,
+              currentBlocks,
+              { protectFirstTitle: !page.localFilePath },
+            );
+          }
+        } catch (error) {
+          toast.error(
+            error instanceof Error && error.message
+              ? error.message
+              : "无法确定待办事项转换范围，页面未修改。",
+          );
+          return false;
+        }
+
+        const userMessage = {
+          id: createChatMessageId("user"),
+          role: "user",
+          metadata,
+          parts: [{ type: "text", text: modelText }],
+        } as NotebookAiMessage;
+        const pendingMessages = [...cleanedMessages, userMessage];
+
+        requestCurrentPageIdRef.current = null;
+        clearError();
+        setMessages(pendingMessages);
+        useNotebookAiChats
+          .getState()
+          .setMessages(notebookId, conversationId, pendingMessages);
+        onConsumeCapturedSelection?.();
+        setIsApplyingTransform(true);
+
+        void (async () => {
+          let assistantText: string;
+
+          try {
+            const latestPage = usePages.getState().pages[currentPageId];
+            const latestTargetError = getTransformTargetError(
+              latestPage,
+              notebookId,
+            );
+            if (latestTargetError) throw new Error(latestTargetError);
+
+            const activeEditor = editorRef?.current?.editor;
+            const isTargetEditorActive =
+              Boolean(activeEditor) &&
+              usePages.getState().activePageId === currentPageId &&
+              getCurrentNotebookAiPageId(notebookId) === currentPageId;
+            let convertedCount: number;
+
+            if (activeEditor && isTargetEditorActive) {
+              const result = applyBlockTypeTransformToEditor(
+                activeEditor,
+                snapshot,
+              );
+              const saved = await usePages
+                .getState()
+                .writePageContent(
+                  currentPageId,
+                  activeEditor.document as JSONContent,
+                );
+              if (!saved) {
+                throw new Error("转换结果未能保存，未完成本轮操作。");
+              }
+              convertedCount = result.convertedCount;
+            } else {
+              const plan = planBlockTypeTransform(
+                snapshot,
+                getPageBlocks(latestPage?.content),
+              );
+              const saved = await usePages
+                .getState()
+                .replaceBlockRange(
+                  currentPageId,
+                  plan.startBlockId,
+                  plan.endBlockId,
+                  plan.replacementBlocks as JSONContent,
+                );
+              if (!saved) {
+                throw new Error("目标内容已变化，未转换待办事项。");
+              }
+              convertedCount = plan.convertedCount;
+            }
+
+            assistantText = `已转换为 ${convertedCount} 个原生待办事项。`;
+            toast.success(assistantText);
+          } catch (error) {
+            const reason =
+              error instanceof Error && error.message
+                ? error.message
+                : "转换待办事项失败，页面未修改。";
+            assistantText = `未完成转换：${reason}`;
+            toast.error(reason);
+          }
+
+          const assistantMessage = {
+            id: createChatMessageId("assistant"),
+            role: "assistant",
+            parts: [{ type: "text", text: assistantText }],
+          } as NotebookAiMessage;
+          const finishedMessages = sanitizeNotebookAiMessages([
+            ...pendingMessages,
+            assistantMessage,
+          ]);
+          useNotebookAiChats
+            .getState()
+            .setMessages(notebookId, conversationId, finishedMessages);
+          setMessages(finishedMessages);
+          setIsApplyingTransform(false);
+        })();
+
+        return true;
+      }
+
+      requestCurrentPageIdRef.current = currentPageId;
       if (cleanedMessages !== messages) {
         setMessages(cleanedMessages);
-        useNotebookAiChats.getState().setMessages(notebookId, cleanedMessages);
+        useNotebookAiChats
+          .getState()
+          .setMessages(notebookId, conversationId, cleanedMessages);
       }
 
       clearError();
       void sendMessage({ text: modelText, metadata });
+      onConsumeCapturedSelection?.();
       return true;
     },
     [
-      isStreaming,
+      isBusy,
       unavailableReason,
       notebookId,
+      conversationId,
       messages,
       setMessages,
       clearError,
       sendMessage,
+      capturedSelection,
+      editorRef,
+      onConsumeCapturedSelection,
     ],
   );
 
-  const handleClearChat = useCallback(() => {
-    if (isStreaming) stop();
+  const persistCurrentConversation = useCallback(() => {
+    useNotebookAiChats
+      .getState()
+      .setMessages(
+        notebookId,
+        conversationId,
+        sanitizeNotebookAiMessages(messages),
+      );
+  }, [notebookId, conversationId, messages]);
+
+  const handleNewConversation = useCallback(() => {
+    if (isBusy) return;
+    persistCurrentConversation();
     clearError();
     requestCurrentPageIdRef.current = null;
+    onConsumeCapturedSelection?.();
+    const nextConversationId = useNotebookAiChats
+      .getState()
+      .createConversation(notebookId);
+    setConversationId(nextConversationId);
     setMessages([]);
-    useNotebookAiChats.getState().clearChat(notebookId);
-  }, [isStreaming, stop, clearError, setMessages, notebookId]);
+  }, [
+    isBusy,
+    persistCurrentConversation,
+    clearError,
+    notebookId,
+    setMessages,
+    onConsumeCapturedSelection,
+  ]);
+
+  const handleSelectConversation = useCallback(
+    (nextConversationId: string) => {
+      if (isBusy || nextConversationId === conversationId) return;
+      persistCurrentConversation();
+      const chats = useNotebookAiChats.getState();
+      chats.setActiveConversation(notebookId, nextConversationId);
+      const nextMessages = chats.getConversationMessages(
+        notebookId,
+        nextConversationId,
+      );
+      clearError();
+      requestCurrentPageIdRef.current = null;
+      onConsumeCapturedSelection?.();
+      setConversationId(nextConversationId);
+      setMessages(nextMessages);
+    },
+    [
+      isBusy,
+      conversationId,
+      notebookId,
+      clearError,
+      setMessages,
+      persistCurrentConversation,
+      onConsumeCapturedSelection,
+    ],
+  );
 
   const searchPages = useCallback(
     (query: string) => getNotebookAiReferenceSuggestions(query, notebookId),
@@ -263,20 +571,28 @@ export function NotebookAiPanel({
 
       {/* 头部 */}
       <div className="flex h-12 shrink-0 items-center gap-2 px-3">
-        <Bot className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+        <Bot
+          className="h-4 w-4 shrink-0 text-muted-foreground"
+          strokeWidth={1.75}
+        />
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
           {notebookName}
         </span>
         <button
           type="button"
-          onClick={handleClearChat}
-          className="flex h-7 w-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-[var(--goose-interactive-hover)] hover:text-muted-foreground"
-          aria-label="清空会话"
-          title="清空会话"
-          disabled={messages.length === 0 && !isStreaming}
+          onClick={handleNewConversation}
+          className="flex h-7 w-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-[var(--goose-interactive-hover)] hover:text-muted-foreground disabled:pointer-events-none disabled:opacity-50"
+          aria-label="新建会话"
+          title="新建会话"
+          disabled={isBusy}
         >
-          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />
         </button>
+        <ConversationHistoryPopover
+          notebookId={notebookId}
+          onSelectConversation={handleSelectConversation}
+          disabled={isBusy}
+        />
         <button
           type="button"
           onClick={onClose}
@@ -310,7 +626,10 @@ export function NotebookAiPanel({
 
       {error ? (
         <div className="mx-3 mb-2 flex items-start gap-2 rounded-[8px] border border-destructive bg-[hsl(var(--background))] px-3 py-2 text-xs text-destructive">
-          <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+          <CircleAlert
+            className="mt-0.5 h-3.5 w-3.5 shrink-0"
+            strokeWidth={1.75}
+          />
           <div className="min-w-0 flex-1">
             <div className="font-medium">本轮失败原因</div>
             <div className="mt-0.5 break-words leading-relaxed">
@@ -324,7 +643,7 @@ export function NotebookAiPanel({
       <Composer
         onSend={handleSend}
         onStop={stop}
-        isStreaming={isStreaming}
+        isStreaming={isBusy}
         disabled={!!unavailableReason}
         placeholder={composerPlaceholder}
         searchPages={searchPages}

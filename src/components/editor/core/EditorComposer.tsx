@@ -23,6 +23,7 @@ import {
   shouldRenderFormattingToolbar,
 } from "@/components/editor/toolbars/formatting";
 import { AIExtension, AIMenuController } from "@blocknote/xl-ai";
+import { GooseAIMenu } from "@/components/editor/ai/GooseAIMenu";
 import { useFormattingToolbarAi } from "@/components/editor/state/formattingToolbarAi";
 import { EditorSideMenu } from "@/components/editor/core/EditorSideMenu";
 import { ImageLightbox } from "@/components/editor/image/ImageLightbox";
@@ -363,7 +364,7 @@ export function EditorComposer({
           }}
         />
         {/* 速记小窗（__GOOSE_LITE__）不挂 AI 菜单。 */}
-        {!__GOOSE_LITE__ && <AIMenuController />}
+        {!__GOOSE_LITE__ && <AIMenuController aiMenu={GooseAIMenu} />}
       </BlockNoteView>
       {linkPopoverOpen && (
         <div

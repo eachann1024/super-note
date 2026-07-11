@@ -2,6 +2,11 @@ import type { PartialBlock } from "@blocknote/core";
 import type { RefObject } from "react";
 import type { EditorRef } from "@/components/editor/core/Editor";
 import { svgToDataUrl } from "@/lib/notebook-ai/svgSanitizer";
+import {
+  appendPageContentSafely,
+  guardPageForAiWrite,
+} from "@/lib/notebook-ai/pageWriteGuard";
+import { useNotebooks } from "@/stores/useNotebooks";
 import { usePages } from "@/stores/usePages";
 import type { JSONContent } from "@/types";
 
@@ -69,7 +74,10 @@ function focusInsertedBlock(editor: ArtifactEditor, block: unknown) {
 
   window.setTimeout(() => {
     try {
-      editor.setTextCursorPosition(block as Parameters<ArtifactEditor["setTextCursorPosition"]>[0], "end");
+      editor.setTextCursorPosition(
+        block as Parameters<ArtifactEditor["setTextCursorPosition"]>[0],
+        "end",
+      );
     } catch {
       // Image and other non-text blocks cannot receive a text cursor.
     }
@@ -134,18 +142,42 @@ function insertBlocksAtEditorCursor(
   return true;
 }
 
-async function appendBlocksToActivePage(blocks: PartialBlock[]) {
+export type ArtifactInsertResult =
+  | { ok: true; pageId: string }
+  | { ok: false; error: string };
+
+function guardActiveArtifactPage() {
   const pageId = usePages.getState().activePageId;
-  if (!pageId || blocks.length === 0) return false;
-  return usePages.getState().appendPageContent(pageId, blocks as JSONContent);
+  const expectedNotebookId = useNotebooks.getState().activeNotebookId;
+  const guard = guardPageForAiWrite(pageId ?? "", { expectedNotebookId });
+  return { pageId, expectedNotebookId, guard };
+}
+
+async function appendBlocksToActivePage(
+  blocks: PartialBlock[],
+): Promise<ArtifactInsertResult> {
+  const { pageId, expectedNotebookId, guard } = guardActiveArtifactPage();
+  if (!pageId || !guard.ok) {
+    return { ok: false, error: guard.ok ? "当前没有打开页面" : guard.error };
+  }
+  const result = await appendPageContentSafely(pageId, blocks as JSONContent, {
+    expectedNotebookId,
+  });
+  return result.ok ? { ok: true, pageId } : { ok: false, error: result.error };
 }
 
 export async function insertArtifactBlocks(
   editorRef: ArtifactEditorRef | undefined,
   blocks: PartialBlock[],
-) {
+): Promise<ArtifactInsertResult> {
+  if (blocks.length === 0) return { ok: false, error: "没有可插入的内容" };
+
+  const { pageId, guard } = guardActiveArtifactPage();
+  if (!pageId || !guard.ok) {
+    return { ok: false, error: guard.ok ? "当前没有打开页面" : guard.error };
+  }
   if (insertBlocksAtEditorCursor(editorRef?.current?.editor ?? null, blocks)) {
-    return true;
+    return { ok: true, pageId };
   }
   return appendBlocksToActivePage(blocks);
 }

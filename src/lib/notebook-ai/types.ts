@@ -20,9 +20,18 @@ export interface NotebookAiAgentContext {
   currentPageId?: string | null;
 }
 
-/** 单个笔记本的会话状态 */
-export interface NotebookAiChatState {
+/** 单条 AI 会话状态 */
+export interface NotebookAiConversationState {
+  id: string;
   messages: NotebookAiMessage[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 单个笔记本的多会话状态 */
+export interface NotebookAiChatState {
+  activeConversationId: string | null;
+  conversations: Record<string, NotebookAiConversationState>;
   updatedAt: number;
 }
 

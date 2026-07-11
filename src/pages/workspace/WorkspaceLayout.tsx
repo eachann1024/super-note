@@ -75,6 +75,8 @@ export function WorkspaceLayout({
     open: openAiPanel,
     toggle: toggleAiPanel,
     close: closeAiPanel,
+    capturedSelection: aiPanelCapturedSelection,
+    consumeCapturedSelection: consumeAiPanelCapturedSelection,
   } = useNotebookAiPanel();
   const searchHighlightNonce = usePages((s) => s.searchHighlightNonce);
   const searchHighlightQuery = usePages((s) => s.searchHighlightQuery);
@@ -130,9 +132,18 @@ export function WorkspaceLayout({
   // 编辑器内的 Space / 斜杠菜单 / 选区 AI 在 uTools 原生模型模式下共用此入口。
   // 使用 open 而非 toggle，重复触发不会把已经打开的面板关掉。
   useEffect(() => {
-    const onOpen = () => {
+    const onOpen = (event: Event) => {
       if (!aiAvailableForNotebook) return;
-      openAiPanel();
+      const detail = (event as CustomEvent<unknown>).detail;
+      const capture =
+        detail &&
+        typeof detail === "object" &&
+        (detail as Record<string, unknown>).version === 1 &&
+        typeof (detail as Record<string, unknown>).pageId === "string" &&
+        Boolean((detail as Record<string, unknown>).selection)
+          ? (detail as Parameters<typeof openAiPanel>[0])
+          : null;
+      openAiPanel(capture);
     };
     window.addEventListener("goose-note:open-ai-panel", onOpen);
     return () => window.removeEventListener("goose-note:open-ai-panel", onOpen);
@@ -427,9 +438,14 @@ export function WorkspaceLayout({
                       aiPanelOpen &&
                       activeNotebookId && (
                         <NotebookAiPanel
+                          key={activeNotebookId}
                           notebookId={activeNotebookId}
                           onClose={closeAiPanel}
                           editorRef={editorRef}
+                          capturedSelection={aiPanelCapturedSelection}
+                          onConsumeCapturedSelection={
+                            consumeAiPanelCapturedSelection
+                          }
                         />
                       )}
                   </div>

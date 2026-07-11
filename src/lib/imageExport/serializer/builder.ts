@@ -1,26 +1,75 @@
 import type { CardTheme } from "../themes";
 import type { WatermarkConfig } from "../watermark";
-import { DEFAULT_WATERMARK_CONFIG, getWatermarkHTML, normalizeWatermarkConfig } from "../watermark";
+import { getWatermarkHTML, normalizeWatermarkConfig } from "../watermark";
 import { escapeHtml } from "./utils";
 
 function getGoogleFontsUrl(): string {
   const families = [
     "Inter:wght@400;500;600;700;800;900",
-    "Noto+Sans+SC:wght@300;400;500;600;700",
+    "Noto+Sans+SC:wght@300;400;500;600;700;800;900",
     "Noto+Serif+SC:wght@400;600;700",
     "JetBrains+Mono:wght@400;500",
-    "Georgia",
     "Courier+Prime:wght@400;700",
     "ZCOOL+XiaoWei",
     "Ma+Shan+Zheng",
-    "Geist:wght@400;500;600;700",
-    "Geist+Mono:wght@400;500",
+    // Space Grotesk 最高到 700；更大字重由浏览器合成
     "Space+Grotesk:wght@400;500;600;700",
-    "Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600",
+    "Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700",
     "IBM+Plex+Sans:wght@400;500;600",
     "IBM+Plex+Mono:wght@400;500",
   ];
   return `https://fonts.googleapis.com/css2?family=${families.join("&family=")}&display=swap`;
+}
+
+/** 粗略判断颜色是否偏亮（勾选对号等对比色） */
+function isLightColor(color: string): boolean {
+  const hex = color.trim();
+  const short = /^#([0-9a-f]{3})$/i.exec(hex);
+  const full = /^#([0-9a-f]{6})$/i.exec(hex);
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (short) {
+    r = parseInt(short[1][0] + short[1][0], 16);
+    g = parseInt(short[1][1] + short[1][1], 16);
+    b = parseInt(short[1][2] + short[1][2], 16);
+  } else if (full) {
+    r = parseInt(full[1].slice(0, 2), 16);
+    g = parseInt(full[1].slice(2, 4), 16);
+    b = parseInt(full[1].slice(4, 6), 16);
+  } else if (/^rgba?\(/i.test(hex)) {
+    const nums = hex
+      .replace(/rgba?\(/i, "")
+      .replace(/\)/, "")
+      .split(",")
+      .map((p) => parseFloat(p.trim()));
+    if (nums.length < 3 || nums.some((n) => !Number.isFinite(n))) return false;
+    r = nums[0];
+    g = nums[1];
+    b = nums[2];
+  } else {
+    return false;
+  }
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance > 0.72;
+}
+
+function contentHeadingSizes(theme: CardTheme): { h1: number; h2: number; h3: number } {
+  const body = theme.bodyFontSize;
+  return {
+    h1: Math.max(Math.round(theme.titleFontSize * 0.85), Math.round(body * 1.75)),
+    h2: Math.max(Math.round(theme.titleFontSize * 0.7), Math.round(body * 1.4)),
+    h3: Math.max(Math.round(theme.titleFontSize * 0.58), Math.round(body * 1.22)),
+  };
+}
+
+function contentHeadingWeights(theme: CardTheme): { h1: number; h2: number; h3: number } {
+  const base = theme.titleFontWeight;
+  return {
+    h1: Math.min(Math.max(base, 600), 900),
+    h2: Math.min(Math.max(base - 100, 600), 800),
+    h3: Math.min(Math.max(base - 200, 600), 700),
+  };
 }
 
 export function buildStyledHTML(params: {
@@ -30,9 +79,20 @@ export function buildStyledHTML(params: {
   isSelection?: boolean;
   watermarkConfig?: WatermarkConfig;
 }): string {
-  const { title, blocksHtml, theme } = params;
+  const { title, blocksHtml, theme, isSelection } = params;
   const wm = normalizeWatermarkConfig(params.watermarkConfig);
   const t = theme;
+  const headingSize = contentHeadingSizes(t);
+  const headingWeight = contentHeadingWeights(t);
+  const checkMarkColor = isLightColor(t.accent)
+    ? t.mode === "dark"
+      ? "#0a0a0a"
+      : t.textColor
+    : "#ffffff";
+  const checkedTaskText = t.secondaryText;
+  const selectionTagHtml = isSelection
+    ? `<div class="gooseshot-selection-tag">选中内容</div>`
+    : "";
 
   const decoStyle = t.showDecorations
     ? `
@@ -65,7 +125,6 @@ export function buildStyledHTML(params: {
   `;
 
   const headerBorder = "margin-bottom: 24px; padding-bottom: 0; border-bottom: none;";
-
   const bodyTextAlign = t.id === "academic" ? "text-align: justify;" : "";
 
   return `<!DOCTYPE html>
@@ -101,52 +160,73 @@ ${decoStyle}
   z-index: 1;
   border: ${t.cardBorder};
 }
-.gooseshot-header {
-  ${headerBorder}
-}
-.gooseshot-title {
-  ${titleStyle}
-}
+.gooseshot-header { ${headerBorder} }
+.gooseshot-title { ${titleStyle} }
 .gooseshot-content > * { margin-bottom: 14px; }
 .gooseshot-content > *:last-child { margin-bottom: 0; }
-.gooseshot-content h1 {
-  font-family: ${t.titleFont};
-  font-size: ${Math.round(t.titleFontSize * 0.85)}px;
-  font-weight: ${t.titleFontWeight};
-  margin-top: 28px;
-  margin-bottom: 14px;
-  color: ${t.textColor};
-  line-height: 1.3;
-}
-.gooseshot-content h2 {
-  font-family: ${t.titleFont};
-  font-size: ${Math.round(t.titleFontSize * 0.7)}px;
-  font-weight: ${Math.max(t.titleFontWeight - 100, 400)};
-  margin-top: 24px;
-  margin-bottom: 12px;
-  color: ${t.textColor};
-}
+.gooseshot-content h1,
+.gooseshot-content h2,
 .gooseshot-content h3 {
   font-family: ${t.titleFont};
-  font-size: ${Math.round(t.titleFontSize * 0.6)}px;
-  font-weight: 600;
+  color: ${t.textColor};
+  letter-spacing: ${t.titleLetterSpacing};
+  text-wrap: balance;
+}
+.gooseshot-content h1 {
+  font-size: ${headingSize.h1}px;
+  font-weight: ${headingWeight.h1};
+  line-height: ${Math.max(t.titleLineHeight, 1.2)};
+  margin-top: 28px;
+  margin-bottom: 14px;
+}
+.gooseshot-content h2 {
+  font-size: ${headingSize.h2}px;
+  font-weight: ${headingWeight.h2};
+  line-height: 1.3;
+  margin-top: 24px;
+  margin-bottom: 12px;
+}
+.gooseshot-content h3 {
+  font-size: ${headingSize.h3}px;
+  font-weight: ${headingWeight.h3};
+  line-height: 1.35;
   margin-top: 20px;
   margin-bottom: 10px;
-  color: ${t.textColor};
 }
+.gooseshot-content > h1:first-child,
+.gooseshot-content > h2:first-child,
+.gooseshot-content > h3:first-child { margin-top: 0; }
 .gooseshot-content p {
   margin-bottom: 12px;
   line-height: ${t.bodyLineHeight};
 }
-.gooseshot-content ul, .gooseshot-content ol {
+/* 空段落：占满一行正文高度，避免空行塌缩 */
+.gooseshot-content .empty-block {
+  min-height: calc(1em * ${t.bodyLineHeight});
+  margin-bottom: 12px;
+  line-height: ${t.bodyLineHeight};
+}
+.gooseshot-content p:empty {
+  min-height: calc(1em * ${t.bodyLineHeight});
+}
+.gooseshot-content ul,
+.gooseshot-content ol,
+.gooseshot-content ul.bn-list,
+.gooseshot-content ol.bn-list {
   margin-bottom: 12px;
   padding-left: 22px;
 }
-.gooseshot-content li {
+.gooseshot-content ul > li,
+.gooseshot-content ol > li,
+.gooseshot-content ul.bn-list > li,
+.gooseshot-content ol.bn-list > li {
   margin-bottom: 5px;
   line-height: 1.75;
 }
-.gooseshot-content ul li::marker { color: ${t.secondaryText}; }
+.gooseshot-content ul > li::marker,
+.gooseshot-content ul.bn-list > li::marker {
+  color: ${t.secondaryText};
+}
 .gooseshot-content code {
   font-family: ${t.codeFont};
   font-size: 0.86em;
@@ -172,6 +252,42 @@ ${decoStyle}
   font-family: ${t.codeFont};
   color: inherit;
 }
+.gooseshot-content .code-block {
+  background: ${t.codeBg};
+  border-radius: 10px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 16px 0;
+  border: 1px solid ${t.tableBorder};
+  color: ${t.codeTextColor ?? t.textColor};
+  font-family: ${t.codeFont};
+}
+.gooseshot-content .code-lang {
+  font-size: 11px;
+  color: ${t.secondaryText};
+  margin-bottom: 6px;
+  font-family: ${t.bodyFont};
+  line-height: 1.4;
+}
+.gooseshot-content .code-summary {
+  font-size: 12px;
+  color: ${t.secondaryText};
+  margin-bottom: 8px;
+  font-family: ${t.bodyFont};
+}
+.gooseshot-content .code-block pre {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+.gooseshot-content pre.code-wrap,
+.gooseshot-content .code-wrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: visible;
+}
 .gooseshot-content blockquote {
   border-left: 3px solid ${t.quoteBorder};
   padding-left: 18px;
@@ -184,6 +300,38 @@ ${decoStyle}
   height: auto;
   border-radius: 10px;
   margin: 16px 0;
+}
+.gooseshot-content .export-figure { margin: 16px 0; }
+.gooseshot-content .export-figure img {
+  display: block;
+  margin: 0 auto 8px;
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+.gooseshot-content .export-figure figcaption {
+  color: ${t.secondaryText};
+  font-size: 0.9em;
+  text-align: center;
+  line-height: 1.5;
+}
+.gooseshot-content .file-card {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  background: ${t.calloutBg};
+  border: 1px solid ${t.tableBorder};
+  border-radius: 10px;
+  margin: 14px 0;
+}
+.gooseshot-content .file-icon { font-size: 18px; line-height: 1; flex-shrink: 0; }
+.gooseshot-content .file-body { min-width: 0; flex: 1; }
+.gooseshot-content .file-name { font-weight: 500; color: ${t.textColor}; }
+.gooseshot-content .file-caption {
+  font-size: 0.9em;
+  color: ${t.secondaryText};
+  margin-top: 2px;
 }
 .gooseshot-content table {
   width: 100%;
@@ -199,6 +347,12 @@ ${decoStyle}
 .gooseshot-content th {
   background: ${t.codeBg};
   font-weight: 600;
+  color: ${t.codeTextColor ?? t.textColor};
+}
+.gooseshot-content .media-fallback {
+  color: ${t.secondaryText};
+  font-size: 0.95em;
+  margin: 12px 0;
 }
 .gooseshot-content hr {
   border: none;
@@ -245,21 +399,13 @@ ${decoStyle}
   border-left: 2px solid ${t.divider};
   padding-left: 14px;
 }
-/* 嵌套容器内的块间距：.gooseshot-content > * 只命中直接子级，嵌套块需单独补 */
 .gooseshot-content .nested-children > *,
-.gooseshot-content .toggle-children > * {
-  margin-bottom: 8px;
-}
+.gooseshot-content .toggle-children > * { margin-bottom: 8px; }
 .gooseshot-content .nested-children > *:last-child,
-.gooseshot-content .toggle-children > *:last-child {
-  margin-bottom: 0;
-}
-/* 嵌套进 callout/折叠块的宽内容（表格、代码块）兜底，避免撑破 flex 容器 */
+.gooseshot-content .toggle-children > *:last-child { margin-bottom: 0; }
 .gooseshot-content .callout-text pre,
 .gooseshot-content .nested-children table,
-.gooseshot-content .toggle-children table {
-  max-width: 100%;
-}
+.gooseshot-content .toggle-children table { max-width: 100%; }
 .gooseshot-watermark {
   margin-top: 28px;
   padding-top: 18px;
@@ -273,10 +419,7 @@ ${decoStyle}
   align-items: center;
   gap: 6px;
 }
-.gooseshot-watermark-icon {
-  font-size: 16px;
-  line-height: 1;
-}
+.gooseshot-watermark-icon { font-size: 16px; line-height: 1; }
 .gooseshot-watermark-brand {
   color: ${t.watermark};
   font-size: 12px;
@@ -299,19 +442,26 @@ ${decoStyle}
 .gooseshot-content .task-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 5px;
+  gap: 0.5em;
+  margin-bottom: 0.35em;
+  line-height: ${t.bodyLineHeight};
+  font-size: ${t.bodyFontSize}px;
+}
+.gooseshot-content .task-checkbox-wrap {
+  height: ${t.bodyLineHeight}em;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 .gooseshot-content .task-checkbox {
-  width: 16px;
-  height: 16px;
-  border: 2px solid ${t.tableBorder};
-  border-radius: 4px;
-  flex-shrink: 0;
-  margin-top: 3px;
+  width: 1em;
+  height: 1em;
+  border: 1.5px solid ${t.tableBorder};
+  border-radius: 0.22em;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
 }
 .gooseshot-content .task-checkbox.checked {
   background: ${t.accent};
@@ -319,13 +469,21 @@ ${decoStyle}
 }
 .gooseshot-content .task-checkbox.checked::after {
   content: '✓';
-  color: white;
-  font-size: 11px;
+  color: ${checkMarkColor};
+  font-size: 0.72em;
+  line-height: 1;
+  font-weight: 700;
+}
+.gooseshot-content .task-item.checked .task-text { color: ${checkedTaskText}; }
+.gooseshot-content .task-text {
+  flex: 1;
+  min-width: 0;
+  line-height: ${t.bodyLineHeight};
 }
 .gooseshot-selection-tag {
   display: inline-block;
-  background: ${t.accent}15;
-  color: ${t.accent};
+  background: ${t.accent}22;
+  color: ${isLightColor(t.accent) && t.mode === "dark" ? t.textColor : t.accent};
   font-size: 11px;
   font-weight: 500;
   padding: 2px 8px;
@@ -342,7 +500,7 @@ ${decoStyle}
       <div class="gooseshot-title">${escapeHtml(title || "无标题")}</div>
     </div>` : ""}
     <div class="gooseshot-content">
-      ${blocksHtml}
+      ${selectionTagHtml}${blocksHtml}
     </div>
     ${getWatermarkHTML(theme, wm)}
   </div>

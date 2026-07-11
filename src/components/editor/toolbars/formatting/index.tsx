@@ -34,6 +34,10 @@ import { InlineGroup } from "@/components/editor/toolbars/formatting/groups/Inli
 import { LinkButton } from "@/components/editor/toolbars/formatting/groups/LinkButton";
 import { AlignGroup } from "@/components/editor/toolbars/formatting/groups/AlignGroup";
 import { ClearFormatButton } from "@/components/editor/toolbars/formatting/groups/ClearFormatButton";
+import {
+  createBlockTypeTransformSelectionSnapshot,
+  type BlockTypeTransformPanelOpenDetail,
+} from "@/lib/ai-write";
 
 export { shouldRenderFormattingToolbar };
 
@@ -139,7 +143,27 @@ export function EditorFormattingToolbar() {
         return;
       }
       if (!aiSettings.useCustomProvider) {
-        window.dispatchEvent(new CustomEvent("goose-note:open-ai-panel"));
+        try {
+          const selection = createBlockTypeTransformSelectionSnapshot(editor, {
+            pageId: page.id,
+            protectFirstTitle: !page.localFilePath,
+          });
+          const detail: BlockTypeTransformPanelOpenDetail = {
+            version: 1,
+            pageId: page.id,
+            selection,
+          };
+          window.dispatchEvent(
+            new CustomEvent("goose-note:open-ai-panel", { detail }),
+          );
+        } catch (error) {
+          toast.error(
+            error instanceof Error && error.message
+              ? error.message
+              : "无法读取当前选区，请重新选择后再试。",
+          );
+          return;
+        }
         toast.info("uTools 内置模型使用右侧笔记本 AI 面板；已为你打开，可直接输入处理要求。");
         return;
       }
@@ -170,7 +194,7 @@ export function EditorFormattingToolbar() {
     } catch {
       /* ignore */
     }
-  }, [editor, aiExtension, aiSettings]);
+  }, [editor, aiExtension, aiSettings, page.id, page.localFilePath]);
 
   const handleAiClose = useCallback(() => {
     const savedSel = savedSelectionRef.current;
