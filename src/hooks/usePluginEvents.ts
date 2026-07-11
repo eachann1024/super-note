@@ -60,6 +60,10 @@ export function usePluginEvents() {
       applyUToolsWindowHeight();
 
       if (!usePages.getState().hydrated) return;
+      // uTools 退出插件时通常只会隐藏窗口，React 不会重新挂载，后台定时器也可能
+      // 被 Chromium 降频。因此每次重新进入插件都主动清理一次过期标签。
+      // 这项清理独立于“自动打开上次笔记”，也应覆盖 open_folder / new_page 入口。
+      useTabs.getState().closeExpiredTabs();
       if (!useSettings.getState().privacy.autoOpenLastNote) return;
       if (code === "open_folder" || code === "new_page") return;
 
