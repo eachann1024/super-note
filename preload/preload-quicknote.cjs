@@ -144,7 +144,7 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       state.windowHeight = h;
       if (Number.isFinite(x)) state.windowX = x;
       if (Number.isFinite(y)) state.windowY = y;
-      const next = hasStateWrapper ? { ...parsed, state } : { state, version: 0 };
+      const next = hasStateWrapper ? { ...parsed, state } : { state, version: typeof parsed.version === "number" ? parsed.version : 1 };
       writeStoredString(QUICKNOTE_DB_KEY, JSON.stringify(next));
     } catch { /* noop */ }
   };
@@ -163,7 +163,7 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
       const state = hasStateWrapper ? parsed.state : parsed;
       state.windowX = Math.round(x);
       state.windowY = Math.round(y);
-      const next = hasStateWrapper ? { ...parsed, state } : { state, version: 0 };
+      const next = hasStateWrapper ? { ...parsed, state } : { state, version: typeof parsed.version === "number" ? parsed.version : 1 };
       writeStoredString(QUICKNOTE_DB_KEY, JSON.stringify(next));
     } catch { /* noop */ }
   };
@@ -187,10 +187,26 @@ if (typeof window !== "undefined" && typeof utools !== "undefined") {
   };
 
   // 复用已隐藏的窗口：show + focus + 置顶，并推 enter 让子窗重新聚焦光标（草稿延续，不重解析）。
+  // 再次显示前用持久化位置/尺寸 setBounds，避免隐藏期间被系统挪位或首次 setBounds 失败后落错位置。
   const showExistingQuickNoteWindow = (mode) => {
     if (!quickNoteWin || quickNoteWin.isDestroyed?.()) return false;
     clearHostQuickNoteEntry();
     try {
+      const prefs = readQuickNotePrefs();
+      if (
+        prefs.windowX !== null &&
+        prefs.windowY !== null &&
+        typeof quickNoteWin.setBounds === "function"
+      ) {
+        try {
+          quickNoteWin.setBounds({
+            x: prefs.windowX,
+            y: prefs.windowY,
+            width: prefs.windowWidth,
+            height: prefs.windowHeight,
+          });
+        } catch { /* noop */ }
+      }
       quickNoteWin.show?.();
       quickNoteWin.focus?.();
       try { quickNoteWin.setAlwaysOnTop?.(true, "screen-saver"); } catch { /* noop */ }

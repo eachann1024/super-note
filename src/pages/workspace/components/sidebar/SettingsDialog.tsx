@@ -15,6 +15,7 @@ import { useNotebookAiChats } from "@/stores/useNotebookAiChats";
 import {
   QUICKNOTE_DEFAULT_HEIGHT,
   QUICKNOTE_DEFAULT_WIDTH,
+  createEmptyQuickNoteDrafts,
   useQuickNote,
 } from "@/stores/useQuickNote";
 import { useSidebarView } from "@/stores/useSidebarView";
@@ -537,8 +538,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const resetAuxiliaryAppState = () => {
     useQuickNote.persist.clearStorage();
     useQuickNote.setState({
-      draftContent: null,
+      activeSlot: 1,
+      drafts: createEmptyQuickNoteDrafts(),
       pinned: true,
+      editorZoom: 1,
       windowWidth: QUICKNOTE_DEFAULT_WIDTH,
       windowHeight: QUICKNOTE_DEFAULT_HEIGHT,
       windowX: undefined,

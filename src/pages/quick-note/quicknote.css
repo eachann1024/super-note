@@ -72,11 +72,6 @@ body,
   padding-bottom: 16px;
 }
 
-.quicknote-editor-scale {
-  --quicknote-editor-zoom: 1;
-  transform: scale(var(--quicknote-editor-zoom));
-  transform-origin: top left;
-}
 /* 首块去掉 BlockNote 给 heading 的 18px 内置上间距：该间距是用来跟「上文」拉开
    距离的，但首块前面没有内容，叠加 surface padding 后顶部会显出一大段死空白。
    仅作用于首块，不影响文中其它 heading 的上间距。 */
@@ -113,12 +108,14 @@ body,
 }
 
 
-/* 速记滚动区：隐藏滚动条占位，保持极简（悬浮时才隐约可见）。 */
+/* 速记滚动区：只保留纵向滚动；横向始终裁切，避免 Cmd+/- 缩放残留底栏滚动条。 */
 .quicknote-root .page-scroll-container {
   scrollbar-width: thin;
+  overflow-x: hidden;
 }
 .quicknote-root .page-scroll-container::-webkit-scrollbar {
   width: 6px;
+  height: 0;
 }
 .quicknote-root .page-scroll-container::-webkit-scrollbar-thumb {
   background: hsl(var(--muted-foreground) / 0.25);
@@ -157,4 +154,138 @@ body,
 
 .quicknote-root [data-goose-slash-lite="true"] [data-notion-slash-scroll] {
   scroll-padding-bottom: 12px;
+}
+
+
+/* ── 1–5 便签切换器 ─────────────────────────────────────────────
+ * 顶栏居中。收起/展开都保持胶囊，但始终只一层表面：
+ * - 收起：单层小胶囊 + 当前数字（数字本身不再套白芯，避免「灰轨套白圆」）
+ * - 展开：同轨拉宽，当前槽位用轻高亮区分
+ */
+.quicknote-slot-switcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  height: 24px;
+  padding: 2px;
+  border-radius: 999px;
+  /* 单层胶囊：浅填充 + 内描边，不要外投影（外投影在收起时会糊成一圈光晕） */
+  background: hsl(var(--foreground) / 0.06);
+  box-shadow: inset 0 0 0 1px hsl(var(--foreground) / 0.07);
+  transition:
+    background 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.quicknote-slot-switcher[data-expanded="true"] {
+  gap: 1px;
+  background: hsl(var(--foreground) / 0.07);
+  box-shadow: inset 0 0 0 1px hsl(var(--foreground) / 0.08);
+}
+
+.quicknote-slot-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 1;
+  cursor: default;
+  overflow: hidden;
+  opacity: 1;
+  box-shadow: none;
+  transition:
+    width 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.14s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.14s ease,
+    background 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.quicknote-slot-btn-label {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+
+/* 收起：非当前项移出文档流，否则 width:0 仍占 flex gap，数字会偏一侧（当前为 1 时偏右） */
+.quicknote-slot-switcher[data-expanded="false"] .quicknote-slot-btn:not([data-active="true"]) {
+  position: absolute;
+  width: 0;
+  min-width: 0;
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 收起当前项：只出数字，透明底，视觉完全交给外层胶囊；左右 padding 对称 */
+.quicknote-slot-switcher[data-expanded="false"] .quicknote-slot-btn[data-active="true"] {
+  width: 22px;
+  color: hsl(var(--foreground));
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 展开当前项：轻高亮芯（与轨同色相、略提亮），不用实心白底+外阴影 */
+.quicknote-slot-switcher[data-expanded="true"] .quicknote-slot-btn[data-active="true"] {
+  color: hsl(var(--foreground));
+  background: hsl(var(--foreground) / 0.1);
+  box-shadow: none;
+}
+
+.quicknote-slot-switcher[data-expanded="true"] .quicknote-slot-btn:not([data-active="true"]):hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--foreground) / 0.05);
+}
+
+.quicknote-slot-btn:focus-visible {
+  outline: none;
+  color: hsl(var(--foreground));
+  box-shadow:
+    0 0 0 2px hsl(var(--goose-editor-bg)),
+    0 0 0 3.5px hsl(var(--foreground) / 0.28);
+}
+
+.dark .quicknote-slot-switcher {
+  background: hsl(var(--foreground) / 0.1);
+  box-shadow: inset 0 0 0 1px hsl(var(--foreground) / 0.1);
+}
+
+.dark .quicknote-slot-switcher[data-expanded="true"] {
+  background: hsl(var(--foreground) / 0.12);
+  box-shadow: inset 0 0 0 1px hsl(var(--foreground) / 0.12);
+}
+
+.dark .quicknote-slot-switcher[data-expanded="false"] .quicknote-slot-btn[data-active="true"] {
+  color: hsl(var(--foreground));
+  background: transparent;
+  box-shadow: none;
+}
+
+.dark .quicknote-slot-switcher[data-expanded="true"] .quicknote-slot-btn[data-active="true"] {
+  color: hsl(var(--foreground));
+  background: hsl(var(--foreground) / 0.14);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quicknote-slot-switcher,
+  .quicknote-slot-btn {
+    transition: none;
+  }
 }

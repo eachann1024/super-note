@@ -102,6 +102,12 @@ declare global {
   const QUICKNOTE_DEFAULT_WIDTH: typeof import('./stores/useQuickNote').QUICKNOTE_DEFAULT_WIDTH
   const QUICKNOTE_MIN_HEIGHT: typeof import('./stores/useQuickNote').QUICKNOTE_MIN_HEIGHT
   const QUICKNOTE_MIN_WIDTH: typeof import('./stores/useQuickNote').QUICKNOTE_MIN_WIDTH
+  const QUICKNOTE_SLOTS: typeof import('./stores/useQuickNote').QUICKNOTE_SLOTS
+  const QUICKNOTE_SLOT_COUNT: typeof import('./stores/useQuickNote').QUICKNOTE_SLOT_COUNT
+  const QUICKNOTE_ZOOM_DEFAULT: typeof import('./stores/useQuickNote').QUICKNOTE_ZOOM_DEFAULT
+  const QUICKNOTE_ZOOM_MAX: typeof import('./stores/useQuickNote').QUICKNOTE_ZOOM_MAX
+  const QUICKNOTE_ZOOM_MIN: typeof import('./stores/useQuickNote').QUICKNOTE_ZOOM_MIN
+  const QUICKNOTE_ZOOM_STEP: typeof import('./stores/useQuickNote').QUICKNOTE_ZOOM_STEP
   const ScrollArea: typeof import('./components/ui/scroll-area').ScrollArea
   const ScrollBar: typeof import('./components/ui/scroll-area').ScrollBar
   const SelectableCard: typeof import('./components/ui/selectable-card').SelectableCard
@@ -165,6 +171,7 @@ declare global {
   const buttonVariants: typeof import('./components/ui/button').buttonVariants
   const cache: typeof import('react').cache
   const cacheSignal: typeof import('react').cacheSignal
+  const clampQuickNoteZoom: typeof import('./stores/useQuickNote').clampQuickNoteZoom
   const clearAllLocalMdSnapshots: typeof import('./lib/local-md-snapshot').clearAllLocalMdSnapshots
   const clearLocalPageMetadataCache: typeof import('./stores/pages/index').clearLocalPageMetadataCache
   const clipboardHasPasteableImage: typeof import('./components/editor/utils/pasteClipboardImage').clipboardHasPasteableImage
@@ -185,6 +192,7 @@ declare global {
   const createEditorSafeContent: typeof import('./components/editor/utils/blocknote-content/index').createEditorSafeContent
   const createEmptyBlockNoteContent: typeof import('./components/editor/utils/blocknote-content/index').createEmptyBlockNoteContent
   const createEmptyLocalPageContent: typeof import('./components/editor/utils/blocknote-content/index').createEmptyLocalPageContent
+  const createEmptyQuickNoteDrafts: typeof import('./stores/useQuickNote').createEmptyQuickNoteDrafts
   const createPageBodyBlockTypeTransformSnapshot: typeof import('./lib/ai-write/index').createPageBodyBlockTypeTransformSnapshot
   const createRef: typeof import('react').createRef
   const createStickyTargetFromResolvedTarget: typeof import('./lib/ai-write/index').createStickyTargetFromResolvedTarget
@@ -230,6 +238,7 @@ declare global {
   const generateExportZip: typeof import('./lib/export/index').generateExportZip
   const getAIAvailability: typeof import('./lib/ai-provider/index').getAIAvailability
   const getAIProviderMode: typeof import('./lib/ai-provider/index').getAIProviderMode
+  const getActiveDraftContent: typeof import('./stores/useQuickNote').getActiveDraftContent
   const getAttachmentBadgeLabel: typeof import('./lib/fileStorage').getAttachmentBadgeLabel
   const getAvailableAIModelOptions: typeof import('./lib/ai-provider/index').getAvailableAIModelOptions
   const getAvailableUToolsAiModels: typeof import('./lib/utools-ai').getAvailableUToolsAiModels
@@ -451,6 +460,9 @@ declare global {
   // @ts-ignore
   export type { Notebook, LocalFolderLoadStatus, LocalFolderLoadState } from './stores/useNotebooks'
   import('./stores/useNotebooks')
+  // @ts-ignore
+  export type { QuickNoteSlot, QuickNoteDrafts } from './stores/useQuickNote'
+  import('./stores/useQuickNote')
   // @ts-ignore
   export type { SettingsState, SearchProvider, Theme, CodeStyle, UToolsSettings, AISettings, DesktopHotkeyStatusState, DesktopHotkeyStatus, DesktopSettings, PrivacySettings, FontConfig, CustomFonts, CustomAction, UIFontSize } from './stores/settings/index'
   import('./stores/settings/index')
