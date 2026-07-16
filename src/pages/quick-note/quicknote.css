@@ -27,7 +27,7 @@ body,
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-/* 顶部标题栏：浮层化——默认隐藏，鼠标进入窗口才淡入（不占布局高度，
+/* 顶部标题栏：浮层化——默认隐藏，鼠标进入顶部热区才淡入（不占布局高度，
    编辑区因此能填满整个窗口）。仍作为拖动区；按钮单独 no-drag（见组件内联 style）。 */
 .quicknote-titlebar {
   position: absolute;
@@ -45,17 +45,16 @@ body,
   );
   opacity: 0;
   transform: translateY(-4px);
-  pointer-events: none;
+  pointer-events: auto;
   transition:
     opacity 0.16s ease,
     transform 0.16s ease;
 }
-/* 鼠标进入整个窗口 → 顶栏淡入；移出 → 淡出。 */
-.quicknote-root:hover .quicknote-titlebar,
+/* 只在鼠标进入顶部 36px 热区或键盘焦点位于顶栏时显示。 */
+.quicknote-titlebar:hover,
 .quicknote-titlebar:focus-within {
   opacity: 1;
   transform: translateY(0);
-  pointer-events: auto;
 }
 
 .quicknote-titlebar-btn {

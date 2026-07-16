@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { X, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -120,14 +127,21 @@ export function QuickNoteApp() {
     return true;
   };
 
-  const handleSwitchSlot = (slot: QuickNoteSlot) => {
-    setPreviewSlot(null);
-    if (slot === useQuickNote.getState().activeSlot) return;
-    setActiveSlot(slot);
-    requestAnimationFrame(() => {
-      editorRef.current?.editor?.focus?.();
-    });
-  };
+  const handleSwitchSlot = useCallback(
+    (slot: QuickNoteSlot) => {
+      setPreviewSlot(null);
+      if (slot === useQuickNote.getState().activeSlot) return;
+      setActiveSlot(slot);
+      toast.info(`已切换到便签 ${slot}`, {
+        id: "quicknote-slot-switch",
+        duration: 1200,
+      });
+      requestAnimationFrame(() => {
+        editorRef.current?.editor?.focus?.();
+      });
+    },
+    [setActiveSlot],
+  );
 
   /** 拖动预览：只改显示槽，不写 activeSlot。 */
   const handlePreviewSlot = (slot: QuickNoteSlot | null) => {
@@ -150,7 +164,8 @@ export function QuickNoteApp() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleSave = () => {
     const isStandalone =
-      typeof window !== "undefined" && window.__GOOSE_QUICKNOTE_STANDALONE__ === true;
+      typeof window !== "undefined" &&
+      window.__GOOSE_QUICKNOTE_STANDALONE__ === true;
 
     if (isStandalone) {
       // B 插件：取最新草稿内容（getState() 绕过闭包，拿到 onChange 实时更新值）。
@@ -210,8 +225,8 @@ export function QuickNoteApp() {
   // 强制置顶（无失焦自动隐藏）：小窗常驻最前层，置顶由主窗 preload 在创建时设定，
   // 失焦不再触发隐藏——点窗外不会收起，只能 Esc / 关闭按钮收起。
 
-  // 键盘：Esc 收起；Cmd/Ctrl+Z 超长期撤销；Cmd/Ctrl+Shift+Z / Cmd/Ctrl+Y 重做；
-  // Cmd +/- 缩放编辑界面（Cmd+0 复位）。
+  // 键盘：Esc 收起；Ctrl+1~5 切换便签；Cmd/Ctrl+Z 超长期撤销；
+  // Cmd/Ctrl+Shift+Z / Cmd/Ctrl+Y 重做；Cmd/Ctrl +/- 缩放编辑界面（0 复位）。
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -223,6 +238,21 @@ export function QuickNoteApp() {
           quickNoteWindow.persistPosition(x, y);
         }
         quickNoteWindow.close();
+        return;
+      }
+
+      if (
+        e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !e.shiftKey &&
+        !e.repeat &&
+        !e.isComposing &&
+        /^[1-5]$/.test(e.key)
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleSwitchSlot(Number(e.key) as QuickNoteSlot);
         return;
       }
 
@@ -272,7 +302,13 @@ export function QuickNoteApp() {
     // 捕获阶段：抢在 ProseMirror undo 之前
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [setEditorZoom, setWindowPosition, undoDraft, redoDraft]);
+  }, [
+    handleSwitchSlot,
+    setEditorZoom,
+    setWindowPosition,
+    undoDraft,
+    redoDraft,
+  ]);
 
   // 窗口位置记忆：用户拖动窗口移动 → 停下后记住最终位置，下次开窗沿用。
   // 轮询间隔必须短于 settle 时间，否则拖动中会反复触发持久化 IPC，导致正文重绘抖动。
@@ -366,7 +402,9 @@ export function QuickNoteApp() {
               </li>
               <li>
                 <b className="text-foreground">多便签</b>
-                ：顶栏中间 1–5 可切换五个独立草稿，各自单独保存；默认只显示当前编号，悬停展开全部。按住拖动可快速预览，松开或移走后生效。
+                ：顶栏中间 1–5
+                可切换五个独立草稿，各自单独保存；默认只显示当前编号，悬停展开全部。按住拖动可快速预览，松开或移走后生效；也可按
+                Ctrl + 1–5 直接切换。
               </li>
               <li>
                 <b className="text-foreground">始终置顶</b>
@@ -374,19 +412,25 @@ export function QuickNoteApp() {
               </li>
               <li>
                 <b className="text-foreground">缩放</b>
-                ：⌘ + / ⌘ - 放大缩小编辑界面，⌘ 0 复位；缩放程度会记住，下次打开仍保持。
+                ：⌘ + / ⌘ - 放大缩小编辑界面，⌘ 0
+                复位；缩放程度会记住，下次打开仍保持。
               </li>
               <li>
                 <b className="text-foreground">收起</b>
-                ：Esc 或点击右上角 <X className="inline h-3 w-3 align-text-bottom" /> 收起，再次呼出草稿仍在。
+                ：Esc 或点击右上角{" "}
+                <X className="inline h-3 w-3 align-text-bottom" />{" "}
+                收起，再次呼出草稿仍在。
               </li>
               <li>
                 <b className="text-foreground">超长期撤销</b>
-                ：⌘/Ctrl + Z 可一路回退编辑记录，关窗后再打开仍可继续撤销；⌘/Ctrl + Shift + Z 或 ⌘/Ctrl + Y 重做。
+                ：⌘/Ctrl + Z
+                可一路回退编辑记录，关窗后再打开仍可继续撤销；⌘/Ctrl + Shift + Z
+                或 ⌘/Ctrl + Y 重做。
               </li>
               <li>
                 <b className="text-foreground">位置 / 尺寸记忆</b>
-                ：弹窗在屏幕上的位置、窗口宽高都会被记住，下次从 uTools 唤起仍在原处打开。
+                ：弹窗在屏幕上的位置、窗口宽高都会被记住，下次从 uTools
+                唤起仍在原处打开。
               </li>
             </ul>
           </PopoverContent>
@@ -438,11 +482,7 @@ export function QuickNoteApp() {
             className="quicknote-editor-surface flex min-h-full flex-col"
             style={{ zoom } as CSSProperties}
           >
-            <Editor
-              ref={editorRef}
-              editable
-              showSideMenu={false}
-            />
+            <Editor ref={editorRef} editable showSideMenu={false} />
           </div>
         </EditorHostBridge>
       </div>
@@ -453,8 +493,7 @@ export function QuickNoteApp() {
         mobileOffset={{ bottom: 30, left: 24, right: 24 }}
         toastOptions={{
           classNames: {
-            toast:
-              "!min-w-0 !pr-10",
+            toast: "!min-w-0 !pr-10",
             // 不再覆盖 top：保留 sonner.tsx 默认的 !top-1/2 !-translate-y-1/2 垂直居中。
             closeButton: "!right-2.5",
           },
