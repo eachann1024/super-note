@@ -230,8 +230,8 @@
  * 的中心偏左 8px。改为由「拥有 children 的列表父块」绘制一根完整主干：
  *
  * - x=10px，与数字 / 圆点 / checkbox 的真实视觉中心轴重合；
- * - y 从父项首行 marker 中心到最后一个子项首行 marker 中心；
- * - 后面仍有同级列表项时，继续穿过父块 margin 并接到下一 marker 中心；
+ * - y 从父项 marker 下边缘开始；接到下一同级项时，在线上方边缘收口；
+ * - 后面仍有同级列表项时，继续穿过父块 margin 并收在下一 marker 上边缘；
  * - 线不接收指针事件，不影响光标、选择、checkbox 和拖拽。
  *
  * 只替换普通列表的原生 child 分段线；折叠列表 / 折叠标题仍使用上方独立的
@@ -248,7 +248,27 @@
   ) {
   --goose-list-marker-axis-x: 10px;
   --goose-list-marker-axis-y: calc(0.75em + 3px);
+  --goose-list-marker-clearance-y: 0.25em;
+  --goose-list-next-marker-clearance-y: 0.25em;
   position: relative;
+}
+
+/* 不同 marker 的纵向轮廓不同：圆点按半径避让，数字按字形半高避让，
+   checkbox 按原生 12px 控件半高避让。连接线与 marker 同轴，但不能穿透。 */
+.workspace-editor-surface
+  .bn-block:has(
+    > .bn-block-content[data-content-type="numberedListItem"]
+      + .bn-block-group
+  ) {
+  --goose-list-marker-clearance-y: 0.625em;
+}
+
+.workspace-editor-surface
+  .bn-block:has(
+    > .bn-block-content[data-content-type="checkListItem"]
+      + .bn-block-group
+  ) {
+  --goose-list-marker-clearance-y: 6px;
 }
 
 .workspace-editor-surface
@@ -264,7 +284,9 @@
   position: absolute;
   z-index: 0;
   left: var(--goose-list-marker-axis-x);
-  top: var(--goose-list-marker-axis-y);
+  top: calc(
+    var(--goose-list-marker-axis-y) + var(--goose-list-marker-clearance-y)
+  );
   bottom: var(--goose-list-marker-axis-y);
   width: 1px;
   border-radius: 1px;
@@ -272,7 +294,44 @@
   pointer-events: none;
 }
 
-/* 下一同级仍是列表时，把主干延长到它的 marker 中心。 */
+/* 下一同级 marker 的上边缘决定主干终点。 */
+.workspace-editor-surface
+  .bn-block-outer:has(
+    > .bn-block
+      > .bn-block-content:is(
+        [data-content-type="bulletListItem"],
+        [data-content-type="numberedListItem"],
+        [data-content-type="checkListItem"]
+      )
+      + .bn-block-group
+  ):has(
+    + .bn-block-outer
+      > .bn-block
+      > .bn-block-content[data-content-type="numberedListItem"]
+  )
+  > .bn-block {
+  --goose-list-next-marker-clearance-y: 0.625em;
+}
+
+.workspace-editor-surface
+  .bn-block-outer:has(
+    > .bn-block
+      > .bn-block-content:is(
+        [data-content-type="bulletListItem"],
+        [data-content-type="numberedListItem"],
+        [data-content-type="checkListItem"]
+      )
+      + .bn-block-group
+  ):has(
+    + .bn-block-outer
+      > .bn-block
+      > .bn-block-content[data-content-type="checkListItem"]
+  )
+  > .bn-block {
+  --goose-list-next-marker-clearance-y: 6px;
+}
+
+/* 下一同级仍是列表时，把主干延长到它的 marker 上边缘。 */
 .workspace-editor-surface
   .bn-block-outer:has(
     > .bn-block
@@ -292,7 +351,10 @@
       )
   )
   > .bn-block::after {
-  bottom: calc(-0.5em - var(--goose-list-marker-axis-y));
+  bottom: calc(
+    -0.5em - var(--goose-list-marker-axis-y) +
+      var(--goose-list-next-marker-clearance-y)
+  );
 }
 
 /* 关闭被单根主干替代的 BlockNote 原生逐项分段线。 */
