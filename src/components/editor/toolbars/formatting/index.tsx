@@ -280,7 +280,10 @@ export function EditorFormattingToolbar() {
     });
   }, [editor, selectedBlocks]);
 
-  const shouldHideForScroll = isScrolling || isContextMenuOpen;
+  // 小窗的格式栏是固定底栏，滚动不会遮挡选区，也不应闪烁隐藏；
+  // 常规笔记本的浮动栏仍在滚动时收起，避免与正文一起漂移。
+  const shouldHideForScroll =
+    (!__GOOSE_LITE__ && isScrolling) || isContextMenuOpen;
   // While AI is active we keep the toolbar visible regardless of scroll/menu.
   const shouldHide = !aiActive && shouldHideForScroll;
 
