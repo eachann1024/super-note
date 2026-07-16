@@ -225,6 +225,101 @@
 }
 
 /*
+ * 嵌套列表连接线：BlockNote 默认把线拆到每个 child outer 上，线段高度不包含
+ * 上面的 block margin，因此列表项之间会出现断口；默认 x 也比 24px marker 槽
+ * 的中心偏左 8px。改为由「拥有 children 的列表父块」绘制一根完整主干：
+ *
+ * - x=12px，与数字 / 圆点 / checkbox 的 marker 中心轴重合；
+ * - y 从父项首行 marker 中心到最后一个子项首行 marker 中心；
+ * - 后面仍有同级列表项时，继续穿过父块 margin 并接到下一 marker 中心；
+ * - 线不接收指针事件，不影响光标、选择、checkbox 和拖拽。
+ *
+ * 只替换普通列表的原生 child 分段线；折叠列表 / 折叠标题仍使用上方独立的
+ * 引用线规则，避免展开态出现双线。
+ */
+.workspace-editor-surface
+  .bn-block:has(
+    > .bn-block-content:is(
+        [data-content-type="bulletListItem"],
+        [data-content-type="numberedListItem"],
+        [data-content-type="checkListItem"]
+      )
+      + .bn-block-group
+  ) {
+  --goose-list-marker-axis-x: 12px;
+  --goose-list-marker-axis-y: calc(0.75em + 3px);
+  position: relative;
+}
+
+.workspace-editor-surface
+  .bn-block:has(
+    > .bn-block-content:is(
+        [data-content-type="bulletListItem"],
+        [data-content-type="numberedListItem"],
+        [data-content-type="checkListItem"]
+      )
+      + .bn-block-group
+  )::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: var(--goose-list-marker-axis-x);
+  top: var(--goose-list-marker-axis-y);
+  bottom: var(--goose-list-marker-axis-y);
+  width: 1px;
+  border-radius: 1px;
+  background: var(--bn-colors-side-menu);
+  pointer-events: none;
+}
+
+/* 下一同级仍是列表时，把主干延长到它的 marker 中心。 */
+.workspace-editor-surface
+  .bn-block-outer:has(
+    > .bn-block
+      > .bn-block-content:is(
+        [data-content-type="bulletListItem"],
+        [data-content-type="numberedListItem"],
+        [data-content-type="checkListItem"]
+      )
+      + .bn-block-group
+  ):has(
+    + .bn-block-outer
+      > .bn-block
+      > .bn-block-content:is(
+        [data-content-type="bulletListItem"],
+        [data-content-type="numberedListItem"],
+        [data-content-type="checkListItem"]
+      )
+  )
+  > .bn-block::after {
+  bottom: calc(-0.5em - var(--goose-list-marker-axis-y));
+}
+
+/* 关闭被单根主干替代的 BlockNote 原生逐项分段线。 */
+.workspace-editor-surface
+  .bn-block:has(
+    > .bn-block-content:is(
+        [data-content-type="bulletListItem"],
+        [data-content-type="numberedListItem"],
+        [data-content-type="checkListItem"]
+      )
+      + .bn-block-group
+  )
+  > .bn-block-group
+  > .bn-block-outer::before {
+  border-left: 0;
+}
+
+/* BlockNote checkbox 原为 4px + 12px + 8px，中心在 10px；保持总宽 24px
+   不动正文，只把左右 margin 调成 6px，让 checkbox 中心落到统一的 12px 轴。 */
+.workspace-editor-surface
+  .bn-block-content[data-content-type="checkListItem"]
+  > div > input {
+  margin-left: 6px;
+  margin-right: 6px;
+}
+
+/*
  * 有序列表编号：直接采用 BlockNote 算好的 data-index（1-based，已正确处理
  * start 属性 + 被 divider/标题等非列表块打断后的重新计数），不要再用自增
  * CSS counter——counter 会无视 data-index、整篇文档连续累加，导致用户输入
