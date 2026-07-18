@@ -101,3 +101,21 @@
 "Open with External Editor" = "Open with External Editor";
 "Open As" = "Open As";
 "No editors available" = "No editors available";
+
+/* Inspector */
+"Inspector tab" = "Inspector tab";
+"Document" = "Document";
+"Properties" = "Properties";
+"File Name" = "File Name";
+"Document Type" = "Document Type";
+"Markdown Document" = "Markdown Document";
+"File Size" = "File Size";
+"Words" = "Words";
+"Characters" = "Characters";
+"Lines" = "Lines";
+"Headings" = "Headings";
+"Links" = "Links";
+"Images" = "Images";
+"Modified" = "Modified";
+"No frontmatter" = "No frontmatter";
+"Untitled" = "Untitled";

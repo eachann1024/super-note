@@ -587,19 +587,19 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSTo
         face.image = sidebarFaceImage()
         menu.addItem(face)
 
-        let hide = NSMenuItem(title: "Hide Sidebar",
+        let hide = NSMenuItem(title: NSLocalizedString("Hide Sidebar", comment: "Sidebar dropdown item"),
                               action: #selector(hideSidebarFromMenu(_:)),
                               keyEquivalent: "")
         hide.target = self
         menu.addItem(hide)
 
-        let outline = NSMenuItem(title: "Table of Contents",
+        let outline = NSMenuItem(title: NSLocalizedString("Table of Contents", comment: "Sidebar dropdown item"),
                                  action: #selector(selectOutlineMode(_:)),
                                  keyEquivalent: "")
         outline.target = self
         menu.addItem(outline)
 
-        let files = NSMenuItem(title: "Project Navigator",
+        let files = NSMenuItem(title: NSLocalizedString("Project Navigator", comment: "Sidebar dropdown item"),
                                action: #selector(selectFilesMode(_:)),
                                keyEquivalent: "")
         files.target = self

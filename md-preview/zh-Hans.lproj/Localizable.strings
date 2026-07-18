@@ -101,3 +101,21 @@
 "Open with External Editor" = "使用外部编辑器打开";
 "Open As" = "打开为";
 "No editors available" = "没有可用的编辑器";
+
+/* Inspector */
+"Inspector tab" = "检查器标签页";
+"Document" = "文稿";
+"Properties" = "属性";
+"File Name" = "文件名称";
+"Document Type" = "文稿类型";
+"Markdown Document" = "Markdown 文稿";
+"File Size" = "文件大小";
+"Words" = "字数";
+"Characters" = "字符数";
+"Lines" = "行数";
+"Headings" = "标题";
+"Links" = "链接";
+"Images" = "图像";
+"Modified" = "修改日期";
+"No frontmatter" = "无前置元数据";
+"Untitled" = "未命名";
