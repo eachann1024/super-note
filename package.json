@@ -1,0 +1,41 @@
+{
+  "name": "goose-notes-native",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "description": "Native macOS notebook with an AppKit shell and a BlockNote WKWebView editor",
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun run tokens && vite --config Web/vite.config.ts --host 127.0.0.1 --port 6001",
+    "tokens": "node scripts/generate-design-tokens.mjs",
+    "tokens:check": "node scripts/generate-design-tokens.mjs --check",
+    "build:web": "bun run tokens && vite build --config Web/vite.config.ts",
+    "typecheck": "tsc -p Web/tsconfig.json --noEmit",
+    "project": "bun run build:web && xcodegen generate",
+    "build:native": "bun run project && xcodebuild -project GooseNotes.xcodeproj -scheme GooseNotes -configuration Debug -derivedDataPath .build/DerivedData CODE_SIGN_IDENTITY=- build",
+    "package:mac": "bash scripts/package-macos.sh",
+    "test:native": "bun run project && xcodebuild -project GooseNotes.xcodeproj -scheme GooseNotes -configuration Debug -derivedDataPath .build/DerivedData -destination 'platform=macOS,arch=arm64' CODE_SIGN_IDENTITY=- build-for-testing && xcrun xctest .build/DerivedData/Build/Products/Debug/GooseNotesTests.xctest",
+    "test:e2e": "playwright test --config Web/playwright.config.ts",
+    "audit:boundaries": "node scripts/audit-boundaries.mjs",
+    "check:web": "bun run build:web && bun run tokens:check && bun run typecheck",
+    "check": "bun run audit:boundaries && bun run check:web && bun run test:native"
+  },
+  "dependencies": {
+    "@blocknote/core": "0.51.3",
+    "@blocknote/mantine": "0.51.3",
+    "@blocknote/react": "0.51.3",
+    "lucide-react": "1.17.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.16",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "typescript": "6.0.3",
+    "vite": "8.0.16"
+  }
+}

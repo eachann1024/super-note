@@ -1,0 +1,17 @@
+.DS_Store
+.build/
+DerivedData/
+build/
+node_modules/
+Web/node_modules/
+Web/dist/
+test-results/
+playwright-report/
+output/
+default.profraw
+*.xcuserstate
+xcuserdata/
+GooseNotes.xcodeproj/
+GooseNotes/Resources/Web/
+GooseNotes/Sources/Generated/
+Web/src/styles/tokens.generated.css
