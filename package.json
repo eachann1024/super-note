@@ -7,17 +7,17 @@
   "description": "Native macOS notebook with an AppKit shell and a BlockNote WKWebView editor",
   "license": "MIT",
   "scripts": {
-    "dev": "vite --config Web/vite.config.ts --host 127.0.0.1 --port 6001",
+    "dev": "bun run tokens && vite --config Web/vite.config.ts --host 127.0.0.1 --port 6001",
     "tokens": "node scripts/generate-design-tokens.mjs",
     "tokens:check": "node scripts/generate-design-tokens.mjs --check",
     "build:web": "bun run tokens && vite build --config Web/vite.config.ts",
     "typecheck": "tsc -p Web/tsconfig.json --noEmit",
-    "project": "xcodegen generate",
-    "build:native": "bun run build:web && bun run project && xcodebuild -project GooseNotes.xcodeproj -scheme GooseNotes -configuration Debug -derivedDataPath .build/DerivedData CODE_SIGN_IDENTITY=- build",
-    "test:native": "bun run build:web && bun run project && xcodebuild -project GooseNotes.xcodeproj -scheme GooseNotes -configuration Debug -derivedDataPath .build/DerivedData -destination 'platform=macOS,arch=arm64' CODE_SIGN_IDENTITY=- build-for-testing && xcrun xctest .build/DerivedData/Build/Products/Debug/GooseNotesTests.xctest",
+    "project": "bun run build:web && xcodegen generate",
+    "build:native": "bun run project && xcodebuild -project GooseNotes.xcodeproj -scheme GooseNotes -configuration Debug -derivedDataPath .build/DerivedData CODE_SIGN_IDENTITY=- build",
+    "test:native": "bun run project && xcodebuild -project GooseNotes.xcodeproj -scheme GooseNotes -configuration Debug -derivedDataPath .build/DerivedData -destination 'platform=macOS,arch=arm64' CODE_SIGN_IDENTITY=- build-for-testing && xcrun xctest .build/DerivedData/Build/Products/Debug/GooseNotesTests.xctest",
     "test:e2e": "playwright test --config Web/playwright.config.ts",
     "audit:boundaries": "node scripts/audit-boundaries.mjs",
-    "check:web": "bun run tokens:check && bun run typecheck && bun run build:web",
+    "check:web": "bun run build:web && bun run tokens:check && bun run typecheck",
     "check": "bun run audit:boundaries && bun run check:web && bun run test:native"
   },
   "dependencies": {

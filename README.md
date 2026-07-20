@@ -14,10 +14,10 @@
 ## 开发
 
 1. 安装依赖：`bun install`
-2. 生成设计令牌：`bun run tokens`
-3. 构建 Web 编辑器：`bun run build:web`
-4. 生成 Xcode 工程：`bun run project`
-5. 构建原生应用：`bun run build:native`
+2. 生成设计令牌、内嵌编辑器和 Xcode 工程：`bun run project`
+3. 构建原生应用：`bun run build:native`
+
+`GooseNotes.xcodeproj`、`GooseNotes/Resources/Web` 和生成的 Swift、CSS 设计令牌均由上述命令重建，不纳入版本控制。
 
 浏览器验收使用 `bun run dev`，打开 `http://127.0.0.1:6001/harness.html`。该页面只提供开发替身，不是生产存储后端。
 

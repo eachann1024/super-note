@@ -11,3 +11,7 @@ output/
 default.profraw
 *.xcuserstate
 xcuserdata/
+GooseNotes.xcodeproj/
+GooseNotes/Resources/Web/
+GooseNotes/Sources/Generated/
+Web/src/styles/tokens.generated.css

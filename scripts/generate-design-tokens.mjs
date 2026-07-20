@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -106,6 +106,7 @@ async function assertOrWrite(path, value) {
     }
     return;
   }
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, value);
 }
 
